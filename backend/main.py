@@ -121,6 +121,20 @@ async def fetch_product_from_openfoodfacts(barcode: str):
         print(f"Error fetching product: {e}")
         return None
 
+@app.get("/test")
+async def serve_test_page():
+    """Serve the image upload test page"""
+    file_path = "static/index.html"
+    
+    if os.path.exists(file_path):
+        return FileResponse(file_path)
+    else:
+        return {
+            "error": "File not found",
+            "looking_for": os.path.abspath(file_path),
+            "current_dir": os.getcwd()
+        }
+    
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
