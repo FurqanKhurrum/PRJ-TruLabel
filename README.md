@@ -5,7 +5,7 @@ Mobile application that allows users to scan product barcodes and view ethical r
 ## Project Information
 - **Team**: Group 8 - PRJ 666
 - **Timeline**: January 5 - April 17, 2026 (12 weeks)
-- **Platform**: Mobile (iOS & Android)
+- **Platform**: Web (Later on mobile)
 
 ## Tech Stack
 
