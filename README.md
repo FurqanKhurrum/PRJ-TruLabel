@@ -41,7 +41,17 @@ TruLabel/
 ```
 
 ## Setup Instructions
-TBD
+Create venv:           python -m venv venv
+Activate:              venv\Scripts\activate (Windows)
+                       source venv/bin/activate (Mac/Linux)
+Install packages:      pip install -r requirements.txt
+List packages:         pip list
+Update package:        pip install --upgrade package-name
+Uninstall package:     pip uninstall package-name
+Freeze dependencies:   pip freeze > requirements.txt
+Deactivate:            deactivate
+Run server:            python main.py
+Stop server:           Ctrl+C
 
 ## Team Members
 - Furqan Khurrum
