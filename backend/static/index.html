@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TruLabel - Image Upload Test</title>
+    <title>TruLabel - Ethical Product Scanner</title>
     <style>
         * {
             margin: 0;
@@ -15,19 +15,20 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
             padding: 20px;
         }
         
         .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .upload-card {
             background: white;
             padding: 40px;
             border-radius: 20px;
             box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            max-width: 600px;
-            width: 100%;
+            margin-bottom: 20px;
         }
         
         h1 {
@@ -105,33 +106,6 @@
             box-shadow: 0 5px 15px rgba(0,0,0,0.2);
         }
         
-        .result {
-            margin-top: 20px;
-            padding: 20px;
-            background: #f8f9fa;
-            border-radius: 10px;
-            border-left: 4px solid #667eea;
-        }
-        
-        .result h3 {
-            color: #667eea;
-            margin-bottom: 10px;
-        }
-        
-        .result p {
-            margin: 5px 0;
-            color: #333;
-        }
-        
-        .error {
-            background: #fee;
-            border-left-color: #f44;
-        }
-        
-        .error h3 {
-            color: #f44;
-        }
-        
         .loading {
             text-align: center;
             color: #667eea;
@@ -153,39 +127,251 @@
             100% { transform: rotate(360deg); }
         }
 
-        .product-image {
-            max-width: 200px;
+        /* Results Section */
+        .results-container {
+            display: none;
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        .product-header {
+            text-align: center;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #f0f0f0;
+            margin-bottom: 30px;
+        }
+
+        .product-header h2 {
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .product-header .brand {
+            color: #666;
+            font-size: 18px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 15px;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 12px 20px;
+            background: transparent;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 600;
+            color: #666;
+            transition: all 0.3s;
+        }
+
+        .tab.active {
+            background: white;
+            color: #667eea;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .score-card {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-left: 4px solid #667eea;
+        }
+
+        .score-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .score-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .score-value {
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        .score-value.excellent {
+            color: #10b981;
+        }
+
+        .score-value.good {
+            color: #3b82f6;
+        }
+
+        .score-value.fair {
+            color: #f59e0b;
+        }
+
+        .score-value.poor {
+            color: #ef4444;
+        }
+
+        .score-description {
+            color: #666;
+            line-height: 1.6;
             margin-top: 10px;
+        }
+
+        .recommendation-badge {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 600;
+            margin-top: 10px;
+        }
+
+        .recommendation-badge.highly-recommended {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .recommendation-badge.recommended {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .recommendation-badge.consider {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .recommendation-badge.avoid {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .attributes-list {
+            margin-top: 20px;
+        }
+
+        .attributes-list h4 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .attributes-list ul {
+            list-style: none;
+        }
+
+        .attributes-list li {
+            padding: 8px 12px;
+            background: white;
+            margin-bottom: 8px;
             border-radius: 8px;
-            box-shadow: 0 3px 10px rgba(0,0,0,0.2);
+            color: #555;
+        }
+
+        .attributes-list li::before {
+            content: "✓ ";
+            color: #10b981;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+
+        .attributes-list.concerns li::before {
+            content: "⚠ ";
+            color: #f59e0b;
+        }
+
+        .error-message {
+            background: #fee2e2;
+            color: #991b1b;
+            padding: 20px;
+            border-radius: 10px;
+            border-left: 4px solid #ef4444;
+        }
+
+        .product-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .detail-item {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+        }
+
+        .detail-label {
+            font-size: 12px;
+            color: #666;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }
+
+        .detail-value {
+            color: #333;
+            font-weight: 600;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🎯 TruLabel Scanner</h1>
-        <p class="subtitle">Upload an image with a barcode to get product information</p>
-        
-        <div class="upload-area" id="uploadArea">
-            <div class="upload-icon">📸</div>
-            <h3>Click or drag image here</h3>
-            <p style="color: #666; margin-top: 10px;">Supports: JPG, PNG, GIF</p>
-            <input type="file" id="fileInput" accept="image/*">
+        <div class="upload-card">
+            <h1>🎯 TruLabel Scanner</h1>
+            <p class="subtitle">Upload a product barcode to get ethical insights</p>
+            
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-icon">📸</div>
+                <h3>Click or drag image here</h3>
+                <p style="color: #666; margin-top: 10px;">Supports: JPG, PNG, GIF</p>
+                <input type="file" id="fileInput" accept="image/*">
+            </div>
+            
+            <button id="scanButton" disabled>Scan Barcode</button>
+            
+            <div id="preview" class="preview" style="display: none;">
+                <h4 style="color: #666; margin-bottom: 10px;">Selected Image:</h4>
+                <img id="previewImage" src="" alt="Preview">
+            </div>
+            
+            <div id="loading" class="loading" style="display: none;">
+                <div class="spinner"></div>
+                <p>Analyzing product...</p>
+            </div>
         </div>
-        
-        <button id="scanButton" disabled>Scan Barcode</button>
-        
-        <div id="preview" class="preview" style="display: none;">
-            <h4 style="color: #666; margin-bottom: 10px;">Selected Image:</h4>
-            <img id="previewImage" src="" alt="Preview">
+
+        <div id="resultsContainer" class="results-container">
+            <div class="product-header">
+                <h2 id="productName"></h2>
+                <p class="brand" id="productBrand"></p>
+            </div>
+
+            <div class="tabs">
+                <button class="tab active" data-tab="overview">Overview</button>
+                <button class="tab" data-tab="details">Details</button>
+                <button class="tab" data-tab="sources">Sources</button>
+            </div>
+
+            <div id="overview" class="tab-content active"></div>
+            <div id="details" class="tab-content"></div>
+            <div id="sources" class="tab-content"></div>
         </div>
-        
-        <div id="loading" class="loading" style="display: none;">
-            <div class="spinner"></div>
-            <p>Scanning barcode...</p>
-        </div>
-        
-        <div id="result" style="display: none;"></div>
     </div>
     
     <script>
@@ -195,19 +381,15 @@
         const preview = document.getElementById('preview');
         const previewImage = document.getElementById('previewImage');
         const loading = document.getElementById('loading');
-        const result = document.getElementById('result');
+        const resultsContainer = document.getElementById('resultsContainer');
         
         let selectedFile = null;
         
         // Click to upload
-        uploadArea.addEventListener('click', () => {
-            fileInput.click();
-        });
+        uploadArea.addEventListener('click', () => fileInput.click());
         
         // File selected
-        fileInput.addEventListener('change', (e) => {
-            handleFile(e.target.files[0]);
-        });
+        fileInput.addEventListener('change', (e) => handleFile(e.target.files[0]));
         
         // Drag and drop
         uploadArea.addEventListener('dragover', (e) => {
@@ -232,8 +414,6 @@
             }
             
             selectedFile = file;
-            
-            // Show preview
             const reader = new FileReader();
             reader.onload = (e) => {
                 previewImage.src = e.target.result;
@@ -241,26 +421,33 @@
             };
             reader.readAsDataURL(file);
             
-            // Enable scan button
             scanButton.disabled = false;
-            result.style.display = 'none';
+            resultsContainer.style.display = 'none';
         }
         
-        // Scan button click
+        // Tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                
+                tab.classList.add('active');
+                document.getElementById(tab.dataset.tab).classList.add('active');
+            });
+        });
+        
+        // Scan button
         scanButton.addEventListener('click', async () => {
             if (!selectedFile) return;
             
-            // Show loading
             loading.style.display = 'block';
-            result.style.display = 'none';
+            resultsContainer.style.display = 'none';
             scanButton.disabled = true;
             
-            // Create form data
             const formData = new FormData();
             formData.append('file', selectedFile);
             
             try {
-                // Send to API
                 const response = await fetch('http://localhost:8000/api/scan-image', {
                     method: 'POST',
                     body: formData
@@ -269,10 +456,8 @@
                 const data = await response.json();
                 
                 if (response.ok) {
-                    // Success
-                    displayResult(data);
+                    displayResults(data);
                 } else {
-                    // Error
                     displayError(data.detail || 'An error occurred');
                 }
                 
@@ -284,30 +469,171 @@
             }
         });
         
-        function displayResult(data) {
+        function getScoreClass(score) {
+            if (score >= 90) return 'excellent';
+            if (score >= 70) return 'good';
+            if (score >= 50) return 'fair';
+            return 'poor';
+        }
+        
+        function getRecommendationClass(rec) {
+            const r = rec.toLowerCase();
+            if (r.includes('highly')) return 'highly-recommended';
+            if (r.includes('recommended')) return 'recommended';
+            if (r.includes('consider')) return 'consider';
+            return 'avoid';
+        }
+        
+        function displayResults(data) {
             const product = data.product;
-            result.innerHTML = `
-                <h3>✅ Product Found!</h3>
-                <p><strong>Barcode:</strong> ${data.barcode}</p>
-                <p><strong>Name:</strong> ${product.product_name}</p>
-                <p><strong>Brand:</strong> ${product.brand_name}</p>
-                <p><strong>Origin:</strong> ${product.country_of_origin}</p>
-                <p><strong>Category:</strong> ${product.category}</p>
-                ${product.labels ? `<p><strong>Labels:</strong> ${product.labels}</p>` : ''}
-                ${product.ecoscore ? `<p><strong>Eco Score:</strong> ${product.ecoscore}/100</p>` : ''}
-                ${product.image_url ? `<img class="product-image" src="${product.image_url}" alt="Product">` : ''}
+            const assessment = data.ethical_assessment;
+            
+            // Set product header
+            document.getElementById('productName').textContent = product.product_name;
+            document.getElementById('productBrand').textContent = product.brand_name;
+            
+            // Check if we have structured data
+            if (assessment.status === 'success' && assessment.data) {
+                const scores = assessment.data;
+                
+                // Overview tab
+                document.getElementById('overview').innerHTML = `
+                    ${scores.sustainability_score !== undefined ? `
+                    <div class="score-card">
+                        <div class="score-header">
+                            <span class="score-title">Sustainability Score</span>
+                            <span class="score-value ${getScoreClass(scores.sustainability_score)}">${scores.sustainability_score}/100</span>
+                        </div>
+                        <p class="score-description">${scores.sustainability_description || 'No description available'}</p>
+                    </div>
+                    ` : ''}
+                    
+                    ${scores.labor_practices_score !== undefined ? `
+                    <div class="score-card">
+                        <div class="score-header">
+                            <span class="score-title">Labor Practices</span>
+                            <span class="score-value ${getScoreClass(scores.labor_practices_score)}">${scores.labor_practices_score}/100</span>
+                        </div>
+                        <p class="score-description">${scores.labor_practices_description || 'No description available'}</p>
+                    </div>
+                    ` : ''}
+                    
+                    ${scores.animal_testing_score !== undefined ? `
+                    <div class="score-card">
+                        <div class="score-header">
+                            <span class="score-title">Animal Testing Policy</span>
+                            <span class="score-value ${getScoreClass(scores.animal_testing_score)}">${scores.animal_testing_score}/100</span>
+                        </div>
+                        <p class="score-description">${scores.animal_testing_description || 'No description available'}</p>
+                    </div>
+                    ` : ''}
+                    
+                    ${scores.environmental_impact_score !== undefined ? `
+                    <div class="score-card">
+                        <div class="score-header">
+                            <span class="score-title">Environmental Impact</span>
+                            <span class="score-value ${getScoreClass(scores.environmental_impact_score)}">${scores.environmental_impact_score}/100</span>
+                        </div>
+                        <p class="score-description">${scores.environmental_impact_description || 'No description available'}</p>
+                    </div>
+                    ` : ''}
+                    
+                    ${scores.overall_recommendation ? `
+                    <div style="text-align: center; margin-top: 20px;">
+                        <h3 style="color: #333; margin-bottom: 10px;">Recommendation</h3>
+                        <span class="recommendation-badge ${getRecommendationClass(scores.overall_recommendation)}">
+                            ${scores.overall_recommendation}
+                        </span>
+                    </div>
+                    ` : ''}
+                    
+                    ${scores.positive_attributes && scores.positive_attributes.length > 0 ? `
+                    <div class="attributes-list">
+                        <h4>✓ Positive Attributes</h4>
+                        <ul>
+                            ${scores.positive_attributes.map(attr => `<li>${attr}</li>`).join('')}
+                        </ul>
+                    </div>
+                    ` : ''}
+                    
+                    ${scores.key_concerns && scores.key_concerns.length > 0 ? `
+                    <div class="attributes-list concerns">
+                        <h4>⚠ Key Concerns</h4>
+                        <ul>
+                            ${scores.key_concerns.map(concern => `<li>${concern}</li>`).join('')}
+                        </ul>
+                    </div>
+                    ` : ''}
+                `;
+            } else if (assessment.raw_assessment) {
+                // Fallback to raw text
+                document.getElementById('overview').innerHTML = `
+                    <div class="score-card">
+                        <p class="score-description">${assessment.raw_assessment}</p>
+                    </div>
+                `;
+            } else {
+                document.getElementById('overview').innerHTML = `
+                    <div class="error-message">
+                        Unable to load ethical assessment
+                    </div>
+                `;
+            }
+            
+            // Details tab
+            document.getElementById('details').innerHTML = `
+                <div class="product-details">
+                    <div class="detail-item">
+                        <div class="detail-label">Barcode</div>
+                        <div class="detail-value">${data.barcode}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Category</div>
+                        <div class="detail-value">${product.category || 'Unknown'}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Origin</div>
+                        <div class="detail-value">${product.country_of_origin || 'Unknown'}</div>
+                    </div>
+                    ${product.ecoscore ? `
+                    <div class="detail-item">
+                        <div class="detail-label">Eco Score</div>
+                        <div class="detail-value">${product.ecoscore}/100</div>
+                    </div>
+                    ` : ''}
+                </div>
+                ${product.labels ? `
+                <div style="margin-top: 20px;">
+                    <h4 style="color: #333; margin-bottom: 10px;">Labels & Certifications</h4>
+                    <p style="color: #666;">${product.labels}</p>
+                </div>
+                ` : ''}
             `;
-            result.className = 'result';
-            result.style.display = 'block';
+            
+            // Sources tab
+            document.getElementById('sources').innerHTML = `
+                <div class="score-card">
+                    <h4 style="margin-bottom: 10px;">Data Sources</h4>
+                    <ul style="list-style: none; color: #666;">
+                        <li style="padding: 8px 0;">📊 Open Food Facts Database</li>
+                        <li style="padding: 8px 0;">🤖 AI Ethical Analysis</li>
+                        <li style="padding: 8px 0;">🌍 Environmental Impact Data</li>
+                    </ul>
+                </div>
+            `;
+            
+            resultsContainer.style.display = 'block';
+            resultsContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
         
         function displayError(message) {
-            result.innerHTML = `
-                <h3>❌ Error</h3>
-                <p>${message}</p>
+            document.getElementById('overview').innerHTML = `
+                <div class="error-message">
+                    <h3>❌ Error</h3>
+                    <p>${message}</p>
+                </div>
             `;
-            result.className = 'result error';
-            result.style.display = 'block';
+            resultsContainer.style.display = 'block';
         }
     </script>
 </body>
