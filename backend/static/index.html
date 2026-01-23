@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TruLabel - Image Upload Test</title>
+    <title>TruLabel - Product Scanner</title>
     <style>
         * {
             margin: 0;
@@ -26,7 +26,7 @@
             padding: 40px;
             border-radius: 20px;
             box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            max-width: 600px;
+            max-width: 800px;
             width: 100%;
         }
         
@@ -40,6 +40,37 @@
             color: #666;
             text-align: center;
             margin-bottom: 30px;
+        }
+        
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .tab {
+            flex: 1;
+            padding: 12px;
+            background: #f0f0f0;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        
+        .tab.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
         }
         
         .upload-area {
@@ -71,6 +102,35 @@
             margin-bottom: 10px;
         }
         
+        .manual-entry {
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .manual-entry input {
+            width: 100%;
+            max-width: 400px;
+            padding: 15px;
+            font-size: 18px;
+            border: 2px solid #667eea;
+            border-radius: 10px;
+            text-align: center;
+            font-family: monospace;
+            letter-spacing: 2px;
+        }
+        
+        .manual-entry input:focus {
+            outline: none;
+            border-color: #764ba2;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .manual-entry p {
+            margin: 15px 0;
+            color: #666;
+            font-size: 14px;
+        }
+        
         button {
             width: 100%;
             padding: 15px;
@@ -91,6 +151,7 @@
         button:disabled {
             opacity: 0.5;
             cursor: not-allowed;
+            transform: none;
         }
         
         .preview {
@@ -115,12 +176,83 @@
         
         .result h3 {
             color: #667eea;
-            margin-bottom: 10px;
+            margin-bottom: 15px;
         }
         
-        .result p {
-            margin: 5px 0;
+        .result h4 {
+            color: #764ba2;
+            margin-top: 20px;
+            margin-bottom: 10px;
+            border-bottom: 2px solid #e0e0e0;
+            padding-bottom: 5px;
+        }
+        
+        .info-row {
+            display: flex;
+            margin: 8px 0;
+            padding: 8px;
+            background: white;
+            border-radius: 5px;
+        }
+        
+        .info-label {
+            font-weight: bold;
+            color: #667eea;
+            min-width: 180px;
+        }
+        
+        .info-value {
             color: #333;
+            flex: 1;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-right: 8px;
+            margin-bottom: 4px;
+        }
+        
+        .badge-success {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .badge-cache-hit {
+            background: #28a745;
+            color: white;
+        }
+        
+        .badge-cache-miss {
+            background: #ffc107;
+            color: #333;
+        }
+        
+        .score {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: bold;
+            margin: 5px 0;
+        }
+        
+        .score-good {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .score-medium {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .score-poor {
+            background: #f8d7da;
+            color: #721c24;
         }
         
         .error {
@@ -154,41 +286,99 @@
         }
 
         .product-image {
-            max-width: 200px;
-            margin-top: 10px;
+            max-width: 250px;
+            margin: 15px auto;
+            border-radius: 12px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+            display: block;
+        }
+        
+        .section {
+            margin-top: 20px;
+            padding: 15px;
+            background: white;
             border-radius: 8px;
-            box-shadow: 0 3px 10px rgba(0,0,0,0.2);
         }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>🎯 TruLabel Scanner</h1>
-        <p class="subtitle">Upload an image with a barcode to get product information</p>
+        <p class="subtitle">Scan or enter a barcode to get product information</p>
         
-        <div class="upload-area" id="uploadArea">
-            <div class="upload-icon">📸</div>
-            <h3>Click or drag image here</h3>
-            <p style="color: #666; margin-top: 10px;">Supports: JPG, PNG, GIF</p>
-            <input type="file" id="fileInput" accept="image/*">
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('scan')">📸 Scan Image</button>
+            <button class="tab" onclick="switchTab('manual')">⌨️ Enter Barcode</button>
         </div>
         
-        <button id="scanButton" disabled>Scan Barcode</button>
+        <!-- Scan Tab -->
+        <div id="scanTab" class="tab-content active">
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-icon">📸</div>
+                <h3>Click or drag image here</h3>
+                <p style="color: #666; margin-top: 10px;">Supports: JPG, PNG, GIF</p>
+                <input type="file" id="fileInput" accept="image/*">
+            </div>
+            
+            <button id="scanButton" disabled>Scan Barcode</button>
+            
+            <div id="preview" class="preview" style="display: none;">
+                <h4 style="color: #666; margin-bottom: 10px;">Selected Image:</h4>
+                <img id="previewImage" src="" alt="Preview">
+            </div>
+        </div>
         
-        <div id="preview" class="preview" style="display: none;">
-            <h4 style="color: #666; margin-bottom: 10px;">Selected Image:</h4>
-            <img id="previewImage" src="" alt="Preview">
+        <!-- Manual Entry Tab -->
+        <div id="manualTab" class="tab-content">
+            <div class="manual-entry">
+                <div class="upload-icon">🔢</div>
+                <h3 style="color: #667eea; margin-bottom: 15px;">Enter Barcode</h3>
+                <p>Type the barcode number printed on the product</p>
+                <input 
+                    type="text" 
+                    id="manualBarcode" 
+                    placeholder="e.g., 06746209"
+                    maxlength="13"
+                    pattern="[0-9]*"
+                >
+                <p style="margin-top: 10px;">
+                    <small>💡 Tip: Look for the number under the barcode</small>
+                </p>
+            </div>
+            
+            <button id="lookupButton">Lookup Product</button>
         </div>
         
         <div id="loading" class="loading" style="display: none;">
             <div class="spinner"></div>
-            <p>Scanning barcode...</p>
+            <p>Searching for product...</p>
         </div>
         
         <div id="result" style="display: none;"></div>
     </div>
     
     <script>
+        // Tab switching
+        function switchTab(tab) {
+            // Update tab buttons
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            // Update tab content
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            if (tab === 'scan') {
+                document.getElementById('scanTab').classList.add('active');
+            } else {
+                document.getElementById('manualTab').classList.add('active');
+                document.getElementById('manualBarcode').focus();
+            }
+            
+            // Clear results
+            document.getElementById('result').style.display = 'none';
+        }
+        
+        // Scan tab functionality
         const uploadArea = document.getElementById('uploadArea');
         const fileInput = document.getElementById('fileInput');
         const scanButton = document.getElementById('scanButton');
@@ -199,17 +389,14 @@
         
         let selectedFile = null;
         
-        // Click to upload
         uploadArea.addEventListener('click', () => {
             fileInput.click();
         });
         
-        // File selected
         fileInput.addEventListener('change', (e) => {
             handleFile(e.target.files[0]);
         });
         
-        // Drag and drop
         uploadArea.addEventListener('dragover', (e) => {
             e.preventDefault();
             uploadArea.classList.add('dragover');
@@ -233,7 +420,6 @@
             
             selectedFile = file;
             
-            // Show preview
             const reader = new FileReader();
             reader.onload = (e) => {
                 previewImage.src = e.target.result;
@@ -241,26 +427,21 @@
             };
             reader.readAsDataURL(file);
             
-            // Enable scan button
             scanButton.disabled = false;
             result.style.display = 'none';
         }
         
-        // Scan button click
         scanButton.addEventListener('click', async () => {
             if (!selectedFile) return;
             
-            // Show loading
             loading.style.display = 'block';
             result.style.display = 'none';
             scanButton.disabled = true;
             
-            // Create form data
             const formData = new FormData();
             formData.append('file', selectedFile);
             
             try {
-                // Send to API
                 const response = await fetch('http://localhost:8000/api/scan-image', {
                     method: 'POST',
                     body: formData
@@ -269,10 +450,8 @@
                 const data = await response.json();
                 
                 if (response.ok) {
-                    // Success
                     displayResult(data);
                 } else {
-                    // Error
                     displayError(data.detail || 'An error occurred');
                 }
                 
@@ -284,19 +463,180 @@
             }
         });
         
+        // Manual entry functionality
+        const manualBarcode = document.getElementById('manualBarcode');
+        const lookupButton = document.getElementById('lookupButton');
+        
+        // Only allow numbers
+        manualBarcode.addEventListener('input', (e) => {
+            e.target.value = e.target.value.replace(/[^0-9]/g, '');
+        });
+        
+        // Search on Enter key
+        manualBarcode.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                lookupButton.click();
+            }
+        });
+        
+        lookupButton.addEventListener('click', async () => {
+            const barcode = manualBarcode.value.trim();
+            
+            if (!barcode) {
+                alert('Please enter a barcode');
+                return;
+            }
+            
+            if (barcode.length < 6) {
+                alert('Barcode must be at least 6 digits');
+                return;
+            }
+            
+            loading.style.display = 'block';
+            result.style.display = 'none';
+            lookupButton.disabled = true;
+            
+            try {
+                const response = await fetch(`http://localhost:8000/api/product/${barcode}`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    displayResult(data);
+                } else {
+                    displayError(data.detail || `Product not found for barcode: ${barcode}`);
+                }
+                
+            } catch (error) {
+                displayError('Failed to connect to server. Make sure the backend is running.');
+            } finally {
+                loading.style.display = 'none';
+                lookupButton.disabled = false;
+            }
+        });
+        
+        function getScoreClass(score) {
+            if (!score) return 'score-medium';
+            if (score >= 70) return 'score-good';
+            if (score >= 40) return 'score-medium';
+            return 'score-poor';
+        }
+        
         function displayResult(data) {
             const product = data.product;
-            result.innerHTML = `
+            
+            let html = `
                 <h3>✅ Product Found!</h3>
-                <p><strong>Barcode:</strong> ${data.barcode}</p>
-                <p><strong>Name:</strong> ${product.product_name}</p>
-                <p><strong>Brand:</strong> ${product.brand_name}</p>
-                <p><strong>Origin:</strong> ${product.country_of_origin}</p>
-                <p><strong>Category:</strong> ${product.category}</p>
-                ${product.labels ? `<p><strong>Labels:</strong> ${product.labels}</p>` : ''}
-                ${product.ecoscore ? `<p><strong>Eco Score:</strong> ${product.ecoscore}/100</p>` : ''}
-                ${product.image_url ? `<img class="product-image" src="${product.image_url}" alt="Product">` : ''}
+                
+                ${product.cache_hit !== undefined ? `
+                    <div style="margin-bottom: 15px;">
+                        <span class="badge ${product.cache_hit ? 'badge-cache-hit' : 'badge-cache-miss'}">
+                            ${product.cache_hit ? '⚡ From Cache (Fast!)' : '🌐 From API (Cached for next time)'}
+                        </span>
+                    </div>
+                ` : ''}
+                
+                ${product.image_url ? `<img class="product-image" src="${product.image_url}" alt="${product.product_name}">` : ''}
+                
+                <div class="section">
+                    <h4>📦 Basic Information</h4>
+                    <div class="info-row">
+                        <div class="info-label">Barcode:</div>
+                        <div class="info-value">${data.barcode}</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Product Name:</div>
+                        <div class="info-value">${product.product_name}</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Brand:</div>
+                        <div class="info-value">${product.brand_name || 'Unknown'}</div>
+                    </div>
+                    ${product.brand_owner ? `
+                    <div class="info-row">
+                        <div class="info-label">Brand Owner:</div>
+                        <div class="info-value">${product.brand_owner}</div>
+                    </div>
+                    ` : ''}
+                    ${product.quantity ? `
+                    <div class="info-row">
+                        <div class="info-label">Quantity:</div>
+                        <div class="info-value">${product.quantity}</div>
+                    </div>
+                    ` : ''}
+                    ${product.category ? `
+                    <div class="info-row">
+                        <div class="info-label">Category:</div>
+                        <div class="info-value">${product.category}</div>
+                    </div>
+                    ` : ''}
+                </div>
+                
+                ${product.country_of_origin || product.manufacturing_places ? `
+                <div class="section">
+                    <h4>🌍 Origin & Manufacturing</h4>
+                    ${product.country_of_origin ? `
+                    <div class="info-row">
+                        <div class="info-label">Country of Origin:</div>
+                        <div class="info-value">${product.country_of_origin}</div>
+                    </div>
+                    ` : ''}
+                    ${product.manufacturing_places ? `
+                    <div class="info-row">
+                        <div class="info-label">Made In:</div>
+                        <div class="info-value">${product.manufacturing_places}</div>
+                    </div>
+                    ` : ''}
+                </div>
+                ` : ''}
+                
+                ${product.labels ? `
+                <div class="section">
+                    <h4>✅ Labels & Certifications</h4>
+                    <div class="info-row">
+                        <div class="info-label">Labels:</div>
+                        <div class="info-value">
+                            ${product.labels.split(',').map(label => 
+                                `<span class="badge badge-success">${label.trim()}</span>`
+                            ).join('')}
+                        </div>
+                    </div>
+                </div>
+                ` : ''}
+                
+                <div class="section">
+                    <h4>📊 Product Scores</h4>
+                    ${product.nutriscore_grade ? `
+                    <div class="info-row">
+                        <div class="info-label">Nutri-Score:</div>
+                        <div class="info-value">
+                            <span class="badge badge-success">
+                                Grade ${product.nutriscore_grade.toUpperCase()}
+                            </span>
+                        </div>
+                    </div>
+                    ` : ''}
+                    ${product.ecoscore ? `
+                    <div class="info-row">
+                        <div class="info-label">Eco-Score:</div>
+                        <div class="info-value">
+                            <span class="score ${getScoreClass(product.ecoscore)}">
+                                ${product.ecoscore}/100
+                            </span>
+                        </div>
+                    </div>
+                    ` : ''}
+                </div>
+                
+                ${product.link ? `
+                <div style="margin-top: 20px; text-align: center;">
+                    <a href="${product.link}" target="_blank" style="color: #667eea; text-decoration: none;">
+                        🔗 View on Open Food Facts
+                    </a>
+                </div>
+                ` : ''}
             `;
+            
+            result.innerHTML = html;
             result.className = 'result';
             result.style.display = 'block';
         }
@@ -305,6 +645,12 @@
             result.innerHTML = `
                 <h3>❌ Error</h3>
                 <p>${message}</p>
+                <p style="margin-top: 15px; color: #666;">
+                    <strong>💡 Try this:</strong>
+                    <br>• If scanning failed, try the "Enter Barcode" tab
+                    <br>• Type the number printed under the barcode
+                    <br>• Example: 06746209
+                </p>
             `;
             result.className = 'result error';
             result.style.display = 'block';
