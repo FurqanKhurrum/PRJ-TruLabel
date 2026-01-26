@@ -15,13 +15,15 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
             padding: 20px;
         }
         
         .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .upload-card {
             background: white;
             padding: 40px;
             border-radius: 20px;
@@ -354,8 +356,6 @@
             <div class="spinner"></div>
             <p>Searching for product...</p>
         </div>
-        
-        <div id="result" style="display: none;"></div>
     </div>
     
     <script>
@@ -385,7 +385,7 @@
         const preview = document.getElementById('preview');
         const previewImage = document.getElementById('previewImage');
         const loading = document.getElementById('loading');
-        const result = document.getElementById('result');
+        const resultsContainer = document.getElementById('resultsContainer');
         
         let selectedFile = null;
         
@@ -428,14 +428,14 @@
             reader.readAsDataURL(file);
             
             scanButton.disabled = false;
-            result.style.display = 'none';
+            resultsContainer.style.display = 'none';
         }
         
         scanButton.addEventListener('click', async () => {
             if (!selectedFile) return;
             
             loading.style.display = 'block';
-            result.style.display = 'none';
+            resultsContainer.style.display = 'none';
             scanButton.disabled = true;
             
             const formData = new FormData();
@@ -652,8 +652,7 @@
                     <br>• Example: 06746209
                 </p>
             `;
-            result.className = 'result error';
-            result.style.display = 'block';
+            resultsContainer.style.display = 'block';
         }
     </script>
 </body>
