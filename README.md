@@ -41,17 +41,22 @@ TruLabel/
 ```
 
 ## Setup Instructions
-- Create venv:           python -m venv venv
-- Activate:              venv\Scripts\activate (Windows)
-                       source venv/bin/activate (Mac/Linux)
-- Install packages:      pip install -r requirements.txt
-- List packages:         pip list
-- Update package:        pip install --upgrade package-name
-- Uninstall package:     pip uninstall package-name
-- Freeze dependencies:   pip freeze > requirements.txt
-- Deactivate:            deactivate
-- Run server:            python main.py
-- Stop server:           Ctrl+C
+1. Create a virtual environment
+   - Windows: `python -m venv venv`
+   - macOS / Linux: `python3 -m venv venv`
+2. Activate the virtual environment
+   - Windows (PowerShell/CMD): `venv\Scripts\activate`
+   - macOS / Linux: `source venv/bin/activate`
+3. Install dependencies: `pip install -r requirements.txt`
+4. List installed packages: `pip list`
+5. Upgrade a package: `pip install --upgrade package-name`
+6. Uninstall a package: `pip uninstall package-name`
+7. Freeze dependencies: `pip freeze > requirements.txt`
+8. Deactivate the virtual environment: `deactivate`
+9. Run the server (development)
+   - If using a simple script: `python main.py`
+   - Or with Uvicorn (FastAPI): `uvicorn main:app --reload`
+10. Stop the server: `Ctrl+C`
 
 
 ## Team Members
