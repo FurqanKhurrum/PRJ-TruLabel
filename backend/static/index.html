@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TruLabel - Ethical Product Scanner</title>
+    <title>TruLabel - Product Scanner</title>
     <style>
         * {
             margin: 0;
@@ -28,7 +28,8 @@
             padding: 40px;
             border-radius: 20px;
             box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            margin-bottom: 20px;
+            max-width: 800px;
+            width: 100%;
         }
         
         h1 {
@@ -41,6 +42,37 @@
             color: #666;
             text-align: center;
             margin-bottom: 30px;
+        }
+        
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .tab {
+            flex: 1;
+            padding: 12px;
+            background: #f0f0f0;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        
+        .tab.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
         }
         
         .upload-area {
@@ -72,6 +104,35 @@
             margin-bottom: 10px;
         }
         
+        .manual-entry {
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .manual-entry input {
+            width: 100%;
+            max-width: 400px;
+            padding: 15px;
+            font-size: 18px;
+            border: 2px solid #667eea;
+            border-radius: 10px;
+            text-align: center;
+            font-family: monospace;
+            letter-spacing: 2px;
+        }
+        
+        .manual-entry input:focus {
+            outline: none;
+            border-color: #764ba2;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .manual-entry p {
+            margin: 15px 0;
+            color: #666;
+            font-size: 14px;
+        }
+        
         button {
             width: 100%;
             padding: 15px;
@@ -92,6 +153,7 @@
         button:disabled {
             opacity: 0.5;
             cursor: not-allowed;
+            transform: none;
         }
         
         .preview {
@@ -104,6 +166,104 @@
             max-height: 300px;
             border-radius: 10px;
             box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        .result {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .result h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+        
+        .result h4 {
+            color: #764ba2;
+            margin-top: 20px;
+            margin-bottom: 10px;
+            border-bottom: 2px solid #e0e0e0;
+            padding-bottom: 5px;
+        }
+        
+        .info-row {
+            display: flex;
+            margin: 8px 0;
+            padding: 8px;
+            background: white;
+            border-radius: 5px;
+        }
+        
+        .info-label {
+            font-weight: bold;
+            color: #667eea;
+            min-width: 180px;
+        }
+        
+        .info-value {
+            color: #333;
+            flex: 1;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-right: 8px;
+            margin-bottom: 4px;
+        }
+        
+        .badge-success {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .badge-cache-hit {
+            background: #28a745;
+            color: white;
+        }
+        
+        .badge-cache-miss {
+            background: #ffc107;
+            color: #333;
+        }
+        
+        .score {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: bold;
+            margin: 5px 0;
+        }
+        
+        .score-good {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .score-medium {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .score-poor {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .error {
+            background: #fee;
+            border-left-color: #f44;
+        }
+        
+        .error h3 {
+            color: #f44;
         }
         
         .loading {
@@ -127,215 +287,35 @@
             100% { transform: rotate(360deg); }
         }
 
-        /* Results Section */
-        .results-container {
-            display: none;
-            background: white;
-            border-radius: 20px;
-            padding: 30px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-        }
-
-        .product-header {
-            text-align: center;
-            padding-bottom: 20px;
-            border-bottom: 2px solid #f0f0f0;
-            margin-bottom: 30px;
-        }
-
-        .product-header h2 {
-            color: #333;
-            margin-bottom: 5px;
-        }
-
-        .product-header .brand {
-            color: #666;
-            font-size: 18px;
-        }
-
-        .tabs {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 30px;
-            background: #f8f9fa;
-            padding: 10px;
-            border-radius: 15px;
-        }
-
-        .tab {
-            flex: 1;
-            padding: 12px 20px;
-            background: transparent;
-            border: none;
-            border-radius: 10px;
-            cursor: pointer;
-            font-weight: 600;
-            color: #666;
-            transition: all 0.3s;
-        }
-
-        .tab.active {
-            background: white;
-            color: #667eea;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-
-        .tab-content {
-            display: none;
-        }
-
-        .tab-content.active {
+        .product-image {
+            max-width: 250px;
+            margin: 15px auto;
+            border-radius: 12px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.2);
             display: block;
         }
-
-        .score-card {
-            background: #f8f9fa;
-            border-radius: 15px;
-            padding: 20px;
-            margin-bottom: 20px;
-            border-left: 4px solid #667eea;
-        }
-
-        .score-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 10px;
-        }
-
-        .score-title {
-            font-size: 18px;
-            font-weight: 600;
-            color: #333;
-        }
-
-        .score-value {
-            font-size: 24px;
-            font-weight: bold;
-        }
-
-        .score-value.excellent {
-            color: #10b981;
-        }
-
-        .score-value.good {
-            color: #3b82f6;
-        }
-
-        .score-value.fair {
-            color: #f59e0b;
-        }
-
-        .score-value.poor {
-            color: #ef4444;
-        }
-
-        .score-description {
-            color: #666;
-            line-height: 1.6;
-            margin-top: 10px;
-        }
-
-        .recommendation-badge {
-            display: inline-block;
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-weight: 600;
-            margin-top: 10px;
-        }
-
-        .recommendation-badge.highly-recommended {
-            background: #d1fae5;
-            color: #065f46;
-        }
-
-        .recommendation-badge.recommended {
-            background: #dbeafe;
-            color: #1e40af;
-        }
-
-        .recommendation-badge.consider {
-            background: #fef3c7;
-            color: #92400e;
-        }
-
-        .recommendation-badge.avoid {
-            background: #fee2e2;
-            color: #991b1b;
-        }
-
-        .attributes-list {
+        
+        .section {
             margin-top: 20px;
-        }
-
-        .attributes-list h4 {
-            color: #333;
-            margin-bottom: 10px;
-        }
-
-        .attributes-list ul {
-            list-style: none;
-        }
-
-        .attributes-list li {
-            padding: 8px 12px;
-            background: white;
-            margin-bottom: 8px;
-            border-radius: 8px;
-            color: #555;
-        }
-
-        .attributes-list li::before {
-            content: "✓ ";
-            color: #10b981;
-            font-weight: bold;
-            margin-right: 8px;
-        }
-
-        .attributes-list.concerns li::before {
-            content: "⚠ ";
-            color: #f59e0b;
-        }
-
-        .error-message {
-            background: #fee2e2;
-            color: #991b1b;
-            padding: 20px;
-            border-radius: 10px;
-            border-left: 4px solid #ef4444;
-        }
-
-        .product-details {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-        }
-
-        .detail-item {
-            background: #f8f9fa;
             padding: 15px;
-            border-radius: 10px;
-        }
-
-        .detail-label {
-            font-size: 12px;
-            color: #666;
-            text-transform: uppercase;
-            margin-bottom: 5px;
-        }
-
-        .detail-value {
-            color: #333;
-            font-weight: 600;
+            background: white;
+            border-radius: 8px;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="upload-card">
-            <h1>🎯 TruLabel Scanner</h1>
-            <p class="subtitle">Upload a product barcode to get ethical insights</p>
-            
+        <h1>🎯 TruLabel Scanner</h1>
+        <p class="subtitle">Scan or enter a barcode to get product information</p>
+        
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('scan')">📸 Scan Image</button>
+            <button class="tab" onclick="switchTab('manual')">⌨️ Enter Barcode</button>
+        </div>
+        
+        <!-- Scan Tab -->
+        <div id="scanTab" class="tab-content active">
             <div class="upload-area" id="uploadArea">
                 <div class="upload-icon">📸</div>
                 <h3>Click or drag image here</h3>
@@ -349,32 +329,56 @@
                 <h4 style="color: #666; margin-bottom: 10px;">Selected Image:</h4>
                 <img id="previewImage" src="" alt="Preview">
             </div>
-            
-            <div id="loading" class="loading" style="display: none;">
-                <div class="spinner"></div>
-                <p>Analyzing product...</p>
-            </div>
         </div>
-
-        <div id="resultsContainer" class="results-container">
-            <div class="product-header">
-                <h2 id="productName"></h2>
-                <p class="brand" id="productBrand"></p>
+        
+        <!-- Manual Entry Tab -->
+        <div id="manualTab" class="tab-content">
+            <div class="manual-entry">
+                <div class="upload-icon">🔢</div>
+                <h3 style="color: #667eea; margin-bottom: 15px;">Enter Barcode</h3>
+                <p>Type the barcode number printed on the product</p>
+                <input 
+                    type="text" 
+                    id="manualBarcode" 
+                    placeholder="e.g., 06746209"
+                    maxlength="13"
+                    pattern="[0-9]*"
+                >
+                <p style="margin-top: 10px;">
+                    <small>💡 Tip: Look for the number under the barcode</small>
+                </p>
             </div>
-
-            <div class="tabs">
-                <button class="tab active" data-tab="overview">Overview</button>
-                <button class="tab" data-tab="details">Details</button>
-                <button class="tab" data-tab="sources">Sources</button>
-            </div>
-
-            <div id="overview" class="tab-content active"></div>
-            <div id="details" class="tab-content"></div>
-            <div id="sources" class="tab-content"></div>
+            
+            <button id="lookupButton">Lookup Product</button>
+        </div>
+        
+        <div id="loading" class="loading" style="display: none;">
+            <div class="spinner"></div>
+            <p>Searching for product...</p>
         </div>
     </div>
     
     <script>
+        // Tab switching
+        function switchTab(tab) {
+            // Update tab buttons
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            // Update tab content
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            if (tab === 'scan') {
+                document.getElementById('scanTab').classList.add('active');
+            } else {
+                document.getElementById('manualTab').classList.add('active');
+                document.getElementById('manualBarcode').focus();
+            }
+            
+            // Clear results
+            document.getElementById('result').style.display = 'none';
+        }
+        
+        // Scan tab functionality
         const uploadArea = document.getElementById('uploadArea');
         const fileInput = document.getElementById('fileInput');
         const scanButton = document.getElementById('scanButton');
@@ -385,13 +389,14 @@
         
         let selectedFile = null;
         
-        // Click to upload
-        uploadArea.addEventListener('click', () => fileInput.click());
+        uploadArea.addEventListener('click', () => {
+            fileInput.click();
+        });
         
-        // File selected
-        fileInput.addEventListener('change', (e) => handleFile(e.target.files[0]));
+        fileInput.addEventListener('change', (e) => {
+            handleFile(e.target.files[0]);
+        });
         
-        // Drag and drop
         uploadArea.addEventListener('dragover', (e) => {
             e.preventDefault();
             uploadArea.classList.add('dragover');
@@ -414,6 +419,7 @@
             }
             
             selectedFile = file;
+            
             const reader = new FileReader();
             reader.onload = (e) => {
                 previewImage.src = e.target.result;
@@ -425,18 +431,6 @@
             resultsContainer.style.display = 'none';
         }
         
-        // Tab switching
-        document.querySelectorAll('.tab').forEach(tab => {
-            tab.addEventListener('click', () => {
-                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-                
-                tab.classList.add('active');
-                document.getElementById(tab.dataset.tab).classList.add('active');
-            });
-        });
-        
-        // Scan button
         scanButton.addEventListener('click', async () => {
             if (!selectedFile) return;
             
@@ -456,7 +450,7 @@
                 const data = await response.json();
                 
                 if (response.ok) {
-                    displayResults(data);
+                    displayResult(data);
                 } else {
                     displayError(data.detail || 'An error occurred');
                 }
@@ -469,169 +463,194 @@
             }
         });
         
-        function getScoreClass(score) {
-            if (score >= 90) return 'excellent';
-            if (score >= 70) return 'good';
-            if (score >= 50) return 'fair';
-            return 'poor';
-        }
+        // Manual entry functionality
+        const manualBarcode = document.getElementById('manualBarcode');
+        const lookupButton = document.getElementById('lookupButton');
         
-        function getRecommendationClass(rec) {
-            const r = rec.toLowerCase();
-            if (r.includes('highly')) return 'highly-recommended';
-            if (r.includes('recommended')) return 'recommended';
-            if (r.includes('consider')) return 'consider';
-            return 'avoid';
-        }
+        // Only allow numbers
+        manualBarcode.addEventListener('input', (e) => {
+            e.target.value = e.target.value.replace(/[^0-9]/g, '');
+        });
         
-        function displayResults(data) {
-            const product = data.product;
-            const assessment = data.ethical_assessment;
+        // Search on Enter key
+        manualBarcode.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                lookupButton.click();
+            }
+        });
+        
+        lookupButton.addEventListener('click', async () => {
+            const barcode = manualBarcode.value.trim();
             
-            // Set product header
-            document.getElementById('productName').textContent = product.product_name;
-            document.getElementById('productBrand').textContent = product.brand_name;
-            
-            // Check if we have structured data
-            if (assessment.status === 'success' && assessment.data) {
-                const scores = assessment.data;
-                
-                // Overview tab
-                document.getElementById('overview').innerHTML = `
-                    ${scores.sustainability_score !== undefined ? `
-                    <div class="score-card">
-                        <div class="score-header">
-                            <span class="score-title">Sustainability Score</span>
-                            <span class="score-value ${getScoreClass(scores.sustainability_score)}">${scores.sustainability_score}/100</span>
-                        </div>
-                        <p class="score-description">${scores.sustainability_description || 'No description available'}</p>
-                    </div>
-                    ` : ''}
-                    
-                    ${scores.labor_practices_score !== undefined ? `
-                    <div class="score-card">
-                        <div class="score-header">
-                            <span class="score-title">Labor Practices</span>
-                            <span class="score-value ${getScoreClass(scores.labor_practices_score)}">${scores.labor_practices_score}/100</span>
-                        </div>
-                        <p class="score-description">${scores.labor_practices_description || 'No description available'}</p>
-                    </div>
-                    ` : ''}
-                    
-                    ${scores.animal_testing_score !== undefined ? `
-                    <div class="score-card">
-                        <div class="score-header">
-                            <span class="score-title">Animal Testing Policy</span>
-                            <span class="score-value ${getScoreClass(scores.animal_testing_score)}">${scores.animal_testing_score}/100</span>
-                        </div>
-                        <p class="score-description">${scores.animal_testing_description || 'No description available'}</p>
-                    </div>
-                    ` : ''}
-                    
-                    ${scores.environmental_impact_score !== undefined ? `
-                    <div class="score-card">
-                        <div class="score-header">
-                            <span class="score-title">Environmental Impact</span>
-                            <span class="score-value ${getScoreClass(scores.environmental_impact_score)}">${scores.environmental_impact_score}/100</span>
-                        </div>
-                        <p class="score-description">${scores.environmental_impact_description || 'No description available'}</p>
-                    </div>
-                    ` : ''}
-                    
-                    ${scores.overall_recommendation ? `
-                    <div style="text-align: center; margin-top: 20px;">
-                        <h3 style="color: #333; margin-bottom: 10px;">Recommendation</h3>
-                        <span class="recommendation-badge ${getRecommendationClass(scores.overall_recommendation)}">
-                            ${scores.overall_recommendation}
-                        </span>
-                    </div>
-                    ` : ''}
-                    
-                    ${scores.positive_attributes && scores.positive_attributes.length > 0 ? `
-                    <div class="attributes-list">
-                        <h4>✓ Positive Attributes</h4>
-                        <ul>
-                            ${scores.positive_attributes.map(attr => `<li>${attr}</li>`).join('')}
-                        </ul>
-                    </div>
-                    ` : ''}
-                    
-                    ${scores.key_concerns && scores.key_concerns.length > 0 ? `
-                    <div class="attributes-list concerns">
-                        <h4>⚠ Key Concerns</h4>
-                        <ul>
-                            ${scores.key_concerns.map(concern => `<li>${concern}</li>`).join('')}
-                        </ul>
-                    </div>
-                    ` : ''}
-                `;
-            } else if (assessment.raw_assessment) {
-                // Fallback to raw text
-                document.getElementById('overview').innerHTML = `
-                    <div class="score-card">
-                        <p class="score-description">${assessment.raw_assessment}</p>
-                    </div>
-                `;
-            } else {
-                document.getElementById('overview').innerHTML = `
-                    <div class="error-message">
-                        Unable to load ethical assessment
-                    </div>
-                `;
+            if (!barcode) {
+                alert('Please enter a barcode');
+                return;
             }
             
-            // Details tab
-            document.getElementById('details').innerHTML = `
-                <div class="product-details">
-                    <div class="detail-item">
-                        <div class="detail-label">Barcode</div>
-                        <div class="detail-value">${data.barcode}</div>
+            if (barcode.length < 6) {
+                alert('Barcode must be at least 6 digits');
+                return;
+            }
+            
+            loading.style.display = 'block';
+            result.style.display = 'none';
+            lookupButton.disabled = true;
+            
+            try {
+                const response = await fetch(`http://localhost:8000/api/product/${barcode}`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    displayResult(data);
+                } else {
+                    displayError(data.detail || `Product not found for barcode: ${barcode}`);
+                }
+                
+            } catch (error) {
+                displayError('Failed to connect to server. Make sure the backend is running.');
+            } finally {
+                loading.style.display = 'none';
+                lookupButton.disabled = false;
+            }
+        });
+        
+        function getScoreClass(score) {
+            if (!score) return 'score-medium';
+            if (score >= 70) return 'score-good';
+            if (score >= 40) return 'score-medium';
+            return 'score-poor';
+        }
+        
+        function displayResult(data) {
+            const product = data.product;
+            
+            let html = `
+                <h3>✅ Product Found!</h3>
+                
+                ${product.cache_hit !== undefined ? `
+                    <div style="margin-bottom: 15px;">
+                        <span class="badge ${product.cache_hit ? 'badge-cache-hit' : 'badge-cache-miss'}">
+                            ${product.cache_hit ? '⚡ From Cache (Fast!)' : '🌐 From API (Cached for next time)'}
+                        </span>
                     </div>
-                    <div class="detail-item">
-                        <div class="detail-label">Category</div>
-                        <div class="detail-value">${product.category || 'Unknown'}</div>
+                ` : ''}
+                
+                ${product.image_url ? `<img class="product-image" src="${product.image_url}" alt="${product.product_name}">` : ''}
+                
+                <div class="section">
+                    <h4>📦 Basic Information</h4>
+                    <div class="info-row">
+                        <div class="info-label">Barcode:</div>
+                        <div class="info-value">${data.barcode}</div>
                     </div>
-                    <div class="detail-item">
-                        <div class="detail-label">Origin</div>
-                        <div class="detail-value">${product.country_of_origin || 'Unknown'}</div>
+                    <div class="info-row">
+                        <div class="info-label">Product Name:</div>
+                        <div class="info-value">${product.product_name}</div>
                     </div>
-                    ${product.ecoscore ? `
-                    <div class="detail-item">
-                        <div class="detail-label">Eco Score</div>
-                        <div class="detail-value">${product.ecoscore}/100</div>
+                    <div class="info-row">
+                        <div class="info-label">Brand:</div>
+                        <div class="info-value">${product.brand_name || 'Unknown'}</div>
+                    </div>
+                    ${product.brand_owner ? `
+                    <div class="info-row">
+                        <div class="info-label">Brand Owner:</div>
+                        <div class="info-value">${product.brand_owner}</div>
+                    </div>
+                    ` : ''}
+                    ${product.quantity ? `
+                    <div class="info-row">
+                        <div class="info-label">Quantity:</div>
+                        <div class="info-value">${product.quantity}</div>
+                    </div>
+                    ` : ''}
+                    ${product.category ? `
+                    <div class="info-row">
+                        <div class="info-label">Category:</div>
+                        <div class="info-value">${product.category}</div>
                     </div>
                     ` : ''}
                 </div>
+                
+                ${product.country_of_origin || product.manufacturing_places ? `
+                <div class="section">
+                    <h4>🌍 Origin & Manufacturing</h4>
+                    ${product.country_of_origin ? `
+                    <div class="info-row">
+                        <div class="info-label">Country of Origin:</div>
+                        <div class="info-value">${product.country_of_origin}</div>
+                    </div>
+                    ` : ''}
+                    ${product.manufacturing_places ? `
+                    <div class="info-row">
+                        <div class="info-label">Made In:</div>
+                        <div class="info-value">${product.manufacturing_places}</div>
+                    </div>
+                    ` : ''}
+                </div>
+                ` : ''}
+                
                 ${product.labels ? `
-                <div style="margin-top: 20px;">
-                    <h4 style="color: #333; margin-bottom: 10px;">Labels & Certifications</h4>
-                    <p style="color: #666;">${product.labels}</p>
+                <div class="section">
+                    <h4>✅ Labels & Certifications</h4>
+                    <div class="info-row">
+                        <div class="info-label">Labels:</div>
+                        <div class="info-value">
+                            ${product.labels.split(',').map(label => 
+                                `<span class="badge badge-success">${label.trim()}</span>`
+                            ).join('')}
+                        </div>
+                    </div>
+                </div>
+                ` : ''}
+                
+                <div class="section">
+                    <h4>📊 Product Scores</h4>
+                    ${product.nutriscore_grade ? `
+                    <div class="info-row">
+                        <div class="info-label">Nutri-Score:</div>
+                        <div class="info-value">
+                            <span class="badge badge-success">
+                                Grade ${product.nutriscore_grade.toUpperCase()}
+                            </span>
+                        </div>
+                    </div>
+                    ` : ''}
+                    ${product.ecoscore ? `
+                    <div class="info-row">
+                        <div class="info-label">Eco-Score:</div>
+                        <div class="info-value">
+                            <span class="score ${getScoreClass(product.ecoscore)}">
+                                ${product.ecoscore}/100
+                            </span>
+                        </div>
+                    </div>
+                    ` : ''}
+                </div>
+                
+                ${product.link ? `
+                <div style="margin-top: 20px; text-align: center;">
+                    <a href="${product.link}" target="_blank" style="color: #667eea; text-decoration: none;">
+                        🔗 View on Open Food Facts
+                    </a>
                 </div>
                 ` : ''}
             `;
             
-            // Sources tab
-            document.getElementById('sources').innerHTML = `
-                <div class="score-card">
-                    <h4 style="margin-bottom: 10px;">Data Sources</h4>
-                    <ul style="list-style: none; color: #666;">
-                        <li style="padding: 8px 0;">📊 Open Food Facts Database</li>
-                        <li style="padding: 8px 0;">🤖 AI Ethical Analysis</li>
-                        <li style="padding: 8px 0;">🌍 Environmental Impact Data</li>
-                    </ul>
-                </div>
-            `;
-            
-            resultsContainer.style.display = 'block';
-            resultsContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            result.innerHTML = html;
+            result.className = 'result';
+            result.style.display = 'block';
         }
         
         function displayError(message) {
-            document.getElementById('overview').innerHTML = `
-                <div class="error-message">
-                    <h3>❌ Error</h3>
-                    <p>${message}</p>
-                </div>
+            result.innerHTML = `
+                <h3>❌ Error</h3>
+                <p>${message}</p>
+                <p style="margin-top: 15px; color: #666;">
+                    <strong>💡 Try this:</strong>
+                    <br>• If scanning failed, try the "Enter Barcode" tab
+                    <br>• Type the number printed under the barcode
+                    <br>• Example: 06746209
+                </p>
             `;
             resultsContainer.style.display = 'block';
         }
