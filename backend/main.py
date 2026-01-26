@@ -1,8 +1,9 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from barcode_service import BarcodeService
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from sqlalchemy.orm import Session
 import os
 import httpx
 import google.genai as genai
@@ -12,6 +13,18 @@ from typing import Optional, Dict, Any
 import asyncio
 import json
 import re
+
+# Import database components
+from database import init_db, get_db
+from product_model import Product, ScanHistory
+from product_service import (
+    get_product_from_cache,
+    save_product_to_cache,
+    add_scan_to_history,
+    get_scan_history,
+    get_cache_stats,
+    clear_stale_cache
+)
 
 # Configure logging
 logging.basicConfig(
@@ -39,10 +52,19 @@ if not api_key:
 client = genai.Client(api_key=api_key)
 
 app = FastAPI(
-    title="TruLabel API",
-    description="Ethical Consumer Product Scanner API",
-    version="1.0.0"
+    title="TruLabel API with Database Caching",
+    description="Ethical Consumer Product Scanner with AI Assessment & Database Caching",
+    version="2.0.0"
 )
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize database on startup"""
+    print("\n" + "="*60)
+    print("TruLabel API Server Starting...")
+    print("="*60)
+    init_db()
+    print("="*60 + "\n")
 
 # Enable CORS
 app.add_middleware(
@@ -224,11 +246,26 @@ def parse_ai_json_response(text: str) -> Optional[Dict[str, Any]]:
 
 @app.get("/")
 async def root():
-    return {"message": "TruLabel API - Welcome!"}
+    """API welcome message"""
+    return {
+        "message": "TruLabel API - Product Scanner with Database Caching",
+        "version": "2.0.0",
+        "features": ["Barcode scanning", "AI ethics assessment", "Database caching", "Scan history"],
+        "endpoints": {
+            "scan": "POST /api/scan-image",
+            "lookup": "GET /api/product/{barcode}",
+            "history": "GET /api/history",
+            "cache_stats": "GET /api/cache/stats",
+            "health": "GET /api/health",
+            "test_ui": "GET /test"
+        }
+    }
 
 @app.get("/api/health")
-async def health_check():
-    """Health check endpoint with AI service status"""
+async def health_check(db: Session = Depends(get_db)):
+    """Health check endpoint with cache stats and AI service status"""
+    stats = get_cache_stats(db)
+    
     ai_status = "unknown"
     try:
         # Quick test of AI service
@@ -247,28 +284,31 @@ async def health_check():
     
     return {
         "status": "healthy",
-        "message": "API is running",
-        "ai_service": ai_status
+        "message": "API is running with database caching",
+        "ai_service": ai_status,
+        "cache_stats": stats
     }
 
 @app.post("/api/scan-image")
-async def scan_image(file: UploadFile = File(...)):
+async def scan_image(file: UploadFile = File(...), db: Session = Depends(get_db)):
     """
     Upload an image and extract barcode
-    
-    Returns product information if barcode found
+    Returns product information with database caching
     """
-    # Validate file type
+    print("\n" + "="*60)
+    print("NEW SCAN REQUEST")
+    print("="*60)
+    
     if not file.content_type.startswith('image/'):
         raise HTTPException(
             status_code=400,
             detail="File must be an image (jpeg, png, etc.)"
         )
     
-    # Read image bytes
     image_bytes = await file.read()
+    print(f"📷 Image uploaded: {len(image_bytes)} bytes")
     
-    # Extract barcode
+    print("🔍 Extracting barcode from image...")
     barcode = barcode_service.extract_barcode_from_image(image_bytes)
     
     if not barcode:
@@ -277,7 +317,36 @@ async def scan_image(file: UploadFile = File(...)):
             detail="No barcode detected in image. Please ensure barcode is clearly visible."
         )
     
-    # Fetch product info from Open Food Facts
+    print(f"✓ Barcode extracted: {barcode}")
+    
+    print("💾 Checking database cache...")
+    cached_product = get_product_from_cache(db, barcode, cache_days=7)
+    
+    if cached_product:
+        print(f"⚡ CACHE HIT! Using cached data for {barcode}")
+        add_scan_to_history(db, barcode)
+        
+        product_dict = cached_product.to_dict()
+        product_dict['cache_hit'] = True
+        
+        # Call AI assessment for cached product
+        ethical_result = await assess_product_ethics(
+            product_name=product_dict.get("product_name", "Unknown"),
+            brand_name=product_dict.get("brand_name", "Unknown"),
+            category=product_dict.get("category", ""),
+            labels=product_dict.get("labels", "")
+        )
+        
+        print("="*60 + "\n")
+        return {
+            "barcode": barcode,
+            "product": product_dict,
+            "ethical_assessment": ethical_result
+        }
+    
+    print(f"❌ Cache miss for {barcode}")
+    print("🌐 Fetching from Open Food Facts API...")
+    
     product_info = await fetch_product_from_openfoodfacts(barcode)
     
     if not product_info:
@@ -286,25 +355,53 @@ async def scan_image(file: UploadFile = File(...)):
             detail=f"Barcode {barcode} not found in product database"
         )
     
-    # Call the AI assessment function
+    print(f"✓ Product found: {product_info.get('product_name', 'Unknown')}")
+    
+    print("💾 Saving to database cache...")
+    saved_product = save_product_to_cache(db, {"barcode": barcode, **product_info})
+    
+    add_scan_to_history(db, barcode)
+    
+    result_dict = saved_product.to_dict()
+    result_dict['cache_hit'] = False
+    
+    # Call AI assessment for new product
     ethical_result = await assess_product_ethics(
-        product_name=product_info.get("product_name", "Unknown"),
-        brand_name=product_info.get("brand_name", "Unknown"),
-        category=product_info.get("category", ""),
-        labels=product_info.get("labels", "")
+        product_name=result_dict.get("product_name", "Unknown"),
+        brand_name=result_dict.get("brand_name", "Unknown"),
+        category=result_dict.get("category", ""),
+        labels=result_dict.get("labels", "")
     )
+    
+    print("✓ Scan complete!")
+    print("="*60 + "\n")
     
     return {
         "barcode": barcode,
-        "product": product_info,
+        "product": result_dict,
         "ethical_assessment": ethical_result
     }
 
 @app.get("/api/product/{barcode}")
-async def get_product(barcode: str):
-    """
-    Get product by barcode (direct lookup, no image)
-    """
+async def get_product(barcode: str, db: Session = Depends(get_db)):
+    """Get product by barcode with caching"""
+    print(f"\n🔍 Direct lookup for barcode: {barcode}")
+    
+    cached_product = get_product_from_cache(db, barcode, cache_days=7)
+    
+    if cached_product:
+        print(f"⚡ Cache hit for {barcode}")
+        add_scan_to_history(db, barcode)
+        
+        product_dict = cached_product.to_dict()
+        product_dict['cache_hit'] = True
+        
+        return {
+            "barcode": barcode,
+            "product": product_dict
+        }
+    
+    print(f"🌐 Fetching {barcode} from API...")
     product_info = await fetch_product_from_openfoodfacts(barcode)
     
     if not product_info:
@@ -313,9 +410,15 @@ async def get_product(barcode: str):
             detail=f"Product {barcode} not found"
         )
     
+    saved_product = save_product_to_cache(db, {"barcode": barcode, **product_info})
+    add_scan_to_history(db, barcode)
+    
+    result_dict = saved_product.to_dict()
+    result_dict['cache_hit'] = False
+    
     return {
         "barcode": barcode,
-        "product": product_info
+        "product": result_dict
     }
 
 async def fetch_product_from_openfoodfacts(barcode: str):
@@ -336,12 +439,30 @@ async def fetch_product_from_openfoodfacts(barcode: str):
                 return {
                     "product_name": product.get("product_name", "Unknown"),
                     "brand_name": product.get("brands", "Unknown"),
+                    "brand_owner": product.get("brand_owner", ""),
+                    "quantity": product.get("quantity", ""),
                     "image_url": product.get("image_url", ""),
+                    "image_front_url": product.get("image_front_url", ""),
+                    "image_small_url": product.get("image_small_url", ""),
                     "country_of_origin": product.get("countries", "Unknown"),
-                    "category": product.get("categories", ""),
-                    "labels": product.get("labels", ""),
                     "origins": product.get("origins", ""),
+                    "manufacturing_places": product.get("manufacturing_places", ""),
+                    "category": product.get("categories", ""),
+                    "ingredients": product.get("ingredients_text", ""),
+                    "allergens": product.get("allergens", ""),
+                    "traces": product.get("traces", ""),
+                    "labels": product.get("labels", ""),
+                    "packaging": product.get("packaging", ""),
+                    "packaging_text": product.get("packaging_text", ""),
+                    "stores": product.get("stores", ""),
+                    "purchase_places": product.get("purchase_places", ""),
+                    "nutriscore_grade": product.get("nutriscore_grade", ""),
+                    "nutriscore_score": product.get("nutriscore_score", None),
                     "ecoscore": product.get("ecoscore_score", None),
+                    "ecoscore_grade": product.get("ecoscore_grade", ""),
+                    "completeness": product.get("completeness", 0),
+                    "link": product.get("link", ""),
+                    "raw_api_data": product
                 }
             else:
                 return None
@@ -349,6 +470,34 @@ async def fetch_product_from_openfoodfacts(barcode: str):
     except Exception as e:
         logger.error(f"Error fetching product: {e}")
         return None
+
+
+@app.get("/api/history")
+async def get_history(limit: int = 20, db: Session = Depends(get_db)):
+    """Get recent scan history"""
+    scans = get_scan_history(db, limit=limit)
+    return {
+        "count": len(scans),
+        "scans": [scan.to_dict() for scan in scans]
+    }
+
+
+@app.get("/api/cache/stats")
+async def cache_statistics(db: Session = Depends(get_db)):
+    """Get cache statistics"""
+    stats = get_cache_stats(db)
+    return stats
+
+
+@app.delete("/api/cache/clear-stale")
+async def clear_stale(days: int = 30, db: Session = Depends(get_db)):
+    """Clear products older than specified days from cache"""
+    count = clear_stale_cache(db, days=days)
+    return {
+        "message": f"Cleared {count} stale products",
+        "days_threshold": days
+    }
+
 
 # Serve static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -360,4 +509,11 @@ async def serve_test_page():
 
 if __name__ == "__main__":
     import uvicorn
+    print("=" * 60)
+    print("TruLabel API Server - With Database Caching & AI Assessment")
+    print("=" * 60)
+    print("Starting server on http://localhost:8000")
+    print("API Docs: http://localhost:8000/docs")
+    print("Test Interface: http://localhost:8000/test")
+    print("=" * 60)
     uvicorn.run(app, host="0.0.0.0", port=8000)
