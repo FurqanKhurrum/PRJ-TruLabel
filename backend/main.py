@@ -1,5 +1,6 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from barcode_service import BarcodeService
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
@@ -48,17 +49,7 @@ if not api_key:
     logger.error("GOOGLE_API_KEY not found in environment variables")
     raise ValueError("GOOGLE_API_KEY must be set in .env file")
 
-# Import database components
-from database import init_db, get_db
-from product_model import Product, ScanHistory
-from product_service import (
-    get_product_from_cache,
-    save_product_to_cache,
-    add_scan_to_history,
-    get_scan_history,
-    get_cache_stats,
-    clear_stale_cache
-)
+client = genai.Client(api_key=api_key)
 
 app = FastAPI(
     title="TruLabel API with Database Caching",
@@ -84,186 +75,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Serve static files (for test interface)
-if os.path.exists("static"):
-    app.mount("/static", StaticFiles(directory="static"), name="static")
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize database on startup"""
-    print("\n" + "="*60)
-    print("TruLabel API Server Starting...")
-    print("="*60)
-    init_db()
-    print("="*60 + "\n")
-
-
-def extract_barcode_from_image(image_bytes: bytes) -> str:
-    """Extract barcode from uploaded image"""
-    try:
-        image = Image.open(io.BytesIO(image_bytes))
-        
-        if image.mode != 'RGB':
-            image = image.convert('RGB')
-        
-        barcodes = pyzbar.decode(image)
-        
-        if not barcodes:
-            return None
-        
-        first_barcode = barcodes[0]
-        barcode_data = first_barcode.data.decode('utf-8')
-        
-        print(f"✓ Detected barcode: {barcode_data} (Type: {first_barcode.type})")
-        
-        return barcode_data
-        
-    except Exception as e:
-        print(f"✗ Error extracting barcode: {e}")
-        return None
-
-
-def generate_barcode_variations(barcode: str) -> list:
-    """
-    Generate smart barcode variations to try
-    Returns list of barcodes ordered by likelihood
-    """
-    variations = []
-    
-    # Always try original first
-    variations.append(barcode)
-    
-    # For 13-digit barcodes starting with 0 (common UPC-A expansion)
-    if len(barcode) == 13 and barcode.startswith('0'):
-        # Try 12-digit version (remove leading 0)
-        variations.append(barcode[1:])
-        
-        # Try extracting potential UPC-E patterns
-        # Pattern: Take specific positions that often work
-        # For 0067000004629 -> 06746209:
-        # Positions: 0,1,2,3,6,7,10,11
-        if len(barcode) >= 12:
-            try:
-                # Common UPC-E extraction pattern
-                upce_attempt = barcode[0] + barcode[1:4] + barcode[6:8] + barcode[10] + barcode[12]
-                if len(upce_attempt) == 8:
-                    variations.append(upce_attempt)
-            except:
-                pass
-    
-    # Try without leading zeros (any length)
-    stripped = barcode.lstrip('0')
-    if stripped and stripped != barcode:
-        variations.append(stripped)
-    
-    # Try first 8 digits
-    if len(barcode) >= 8:
-        variations.append(barcode[:8])
-        # Also try first 8 without leading zeros
-        first_8_stripped = barcode[:8].lstrip('0')
-        if first_8_stripped != barcode[:8]:
-            variations.append(first_8_stripped)
-    
-    # Try last 8 digits
-    if len(barcode) >= 8:
-        variations.append(barcode[-8:])
-        # Also try last 8 without leading zeros
-        last_8_stripped = barcode[-8:].lstrip('0')
-        if last_8_stripped != barcode[-8:]:
-            variations.append(last_8_stripped)
-    
-    # For shorter barcodes, try with leading zero
-    if len(barcode) < 13 and not barcode.startswith('0'):
-        variations.append('0' + barcode)
-    
-    # Remove duplicates while preserving order
-    seen = set()
-    unique = []
-    for v in variations:
-        if v and v not in seen and len(v) >= 6:  # Must be at least 6 digits
-            seen.add(v)
-            unique.append(v)
-    
-    return unique
-
-
-async def fetch_product_from_openfoodfacts(barcode: str) -> dict:
-    """
-    Fetch product from Open Food Facts API
-    Tries multiple barcode format variations
-    """
-    
-    # Generate variations to try
-    barcodes_to_try = generate_barcode_variations(barcode)
-    
-    print(f"🔍 Trying {len(barcodes_to_try)} barcode variation(s)")
-    for i, bc in enumerate(barcodes_to_try, 1):
-        print(f"   {i}. {bc}")
-    
-    # Try each variation
-    for try_barcode in barcodes_to_try:
-        url = f"https://world.openfoodfacts.org/api/v0/product/{try_barcode}.json"
-        
-        try:
-            print(f"   → Trying {try_barcode}...", end=" ")
-            async with httpx.AsyncClient() as client:
-                response = await client.get(url, timeout=10.0)
-                response.raise_for_status()
-                
-                data = response.json()
-                
-                if data.get("status") == 1:
-                    product = data.get("product", {})
-                    product_name = product.get("product_name", "Unknown")
-                    
-                    print(f"✓ FOUND! ({product_name})")
-                    
-                    # Extract product data (WITHOUT scanned_barcode)
-                    product_data = {
-                        "barcode": try_barcode,
-                        "product_name": product_name,
-                        "brand_name": product.get("brands", "Unknown"),
-                        "brand_owner": product.get("brand_owner", ""),
-                        "quantity": product.get("quantity", ""),
-                        "image_url": product.get("image_url", ""),
-                        "image_front_url": product.get("image_front_url", ""),
-                        "image_small_url": product.get("image_small_url", ""),
-                        "country_of_origin": product.get("countries", "Unknown"),
-                        "origins": product.get("origins", ""),
-                        "manufacturing_places": product.get("manufacturing_places", ""),
-                        "category": product.get("categories", ""),
-                        "ingredients": product.get("ingredients_text", ""),
-                        "allergens": product.get("allergens", ""),
-                        "traces": product.get("traces", ""),
-                        "labels": product.get("labels", ""),
-                        "packaging": product.get("packaging", ""),
-                        "packaging_text": product.get("packaging_text", ""),
-                        "stores": product.get("stores", ""),
-                        "purchase_places": product.get("purchase_places", ""),
-                        "nutriscore_grade": product.get("nutriscore_grade", ""),
-                        "nutriscore_score": product.get("nutriscore_score", None),
-                        "ecoscore": product.get("ecoscore_score", None),
-                        "ecoscore_grade": product.get("ecoscore_grade", ""),
-                        "completeness": product.get("completeness", 0),
-                        "link": product.get("link", ""),
-                        "raw_api_data": product
-                    }
-                    
-                    if try_barcode != barcode:
-                        print(f"      ℹ️  Used format {try_barcode} instead of scanned {barcode}")
-                    
-                    return product_data
-                else:
-                    print(f"✗")
-                    
-        except Exception as e:
-            print(f"✗")
-            continue
-    
-    print(f"❌ Product not found with any variation")
-    return None
-
+barcode_service = BarcodeService()
 
 # Configuration constants
 MAX_RETRIES = 3
@@ -477,7 +289,6 @@ async def health_check(db: Session = Depends(get_db)):
         "cache_stats": stats
     }
 
-
 @app.post("/api/scan-image")
 async def scan_image(file: UploadFile = File(...), db: Session = Depends(get_db)):
     """
@@ -538,10 +349,10 @@ async def scan_image(file: UploadFile = File(...), db: Session = Depends(get_db)
     
     product_info = await fetch_product_from_openfoodfacts(barcode)
     
-    if not product_data:
+    if not product_info:
         raise HTTPException(
             status_code=404,
-            detail=f"Barcode {barcode} not found in product database. Tried multiple formats."
+            detail=f"Barcode {barcode} not found in product database"
         )
     
     print(f"✓ Product found: {product_info.get('product_name', 'Unknown')}")
@@ -571,7 +382,6 @@ async def scan_image(file: UploadFile = File(...), db: Session = Depends(get_db)
         "ethical_assessment": ethical_result
     }
 
-
 @app.get("/api/product/{barcode}")
 async def get_product(barcode: str, db: Session = Depends(get_db)):
     """Get product by barcode with caching"""
@@ -594,13 +404,10 @@ async def get_product(barcode: str, db: Session = Depends(get_db)):
     print(f"🌐 Fetching {barcode} from API...")
     product_info = await fetch_product_from_openfoodfacts(barcode)
     
-    print(f"🌐 Fetching {barcode} from API...")
-    product_data = await fetch_product_from_openfoodfacts(barcode)
-    
-    if not product_data:
+    if not product_info:
         raise HTTPException(
             status_code=404,
-            detail=f"Product {barcode} not found. Tried multiple formats."
+            detail=f"Product {barcode} not found"
         )
     
     saved_product = save_product_to_cache(db, {"barcode": barcode, **product_info})
@@ -698,14 +505,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 @app.get("/test")
 async def serve_test_page():
     """Serve the image upload test page"""
-    if os.path.exists("static/index.html"):
-        return FileResponse("static/index.html")
-    else:
-        return {
-            "message": "Test page not found. Create static/index.html to use the test interface.",
-            "api_docs": "Visit /docs for interactive API documentation"
-        }
-
+    return FileResponse("static/index.html")
 
 if __name__ == "__main__":
     import uvicorn
