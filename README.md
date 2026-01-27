@@ -57,6 +57,7 @@ TruLabel/
    - If using a simple script: `python main.py`
    - Or with Uvicorn (FastAPI): `uvicorn main:app --reload`
 10. Stop the server: `Ctrl+C`
+11. To get your API key go to: https://aistudio.google.com/
 
 
 ## Team Members
