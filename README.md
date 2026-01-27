@@ -58,6 +58,14 @@ TruLabel/
    - Or with Uvicorn (FastAPI): `uvicorn main:app --reload`
 10. Stop the server: `Ctrl+C`
 
+## Setup Instructions Fontend
+1. Go to the frontend folder: `cd frontend`
+2. Install dependencies: `npm install`
+3. (Optional) Set the backend URL in `frontend/.env.local`:
+   - `NEXT_PUBLIC_API_BASE=http://localhost:8000`
+4. Start the dev server: `npm run dev`
+5. Open the app: `http://localhost:3000`
+
 
 ## Team Members
 - Furqan Khurrum
