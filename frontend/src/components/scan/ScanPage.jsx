@@ -29,7 +29,7 @@ export default function ScanPage() {
       saveRecentScan(result);
       router.push("/scan-result");
     } catch (err) {
-      setError(err?.message ?? "Unable to scan that image.");
+      setError(err?.message ?? "Unable to scan that image, please try again.");
     } finally {
       setIsLoading(false);
     }
