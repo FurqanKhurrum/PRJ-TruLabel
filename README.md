@@ -60,6 +60,15 @@ TruLabel/
 11. To get your API key go to: https://aistudio.google.com/
 
 
+## Setup Instructions Fontend
+1. Go to the frontend folder: `cd frontend`
+2. Install dependencies: `npm install`
+3. (Optional) Set the backend URL in `frontend/.env.local`:
+   - `NEXT_PUBLIC_API_BASE=http://localhost:8000`
+4. Start the backend server: `uvicorn main:app --reload --port 8000`
+4. Start the dev server: `npm run dev`
+5. Open the app: `http://localhost:3000`
+
 
 ## Team Members
 - Furqan Khurrum
