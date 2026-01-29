@@ -63,6 +63,7 @@ TruLabel/
 2. Install dependencies: `npm install`
 3. (Optional) Set the backend URL in `frontend/.env.local`:
    - `NEXT_PUBLIC_API_BASE=http://localhost:8000`
+4. Start the backend server: `uvicorn main:app --reload --port 8000`
 4. Start the dev server: `npm run dev`
 5. Open the app: `http://localhost:3000`
 
