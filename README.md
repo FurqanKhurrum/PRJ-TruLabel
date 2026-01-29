@@ -60,6 +60,7 @@ TruLabel/
 11. To get your API key go to: https://aistudio.google.com/
 
 
+
 ## Team Members
 - Furqan Khurrum
 - Kencho Lodhen
