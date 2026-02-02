@@ -64,11 +64,14 @@ def save_product_to_cache(db: Session, product_data: Dict) -> Product:
         if existing_product:
             # Update existing product
             print(f"Updating existing product {barcode} in cache")
-            
+
+            # Skip datetime fields - we'll set them manually
+            datetime_fields = ['cached_at', 'fetched_at', 'created_at', 'updated_at']
+
             for key, value in product_data.items():
-                if key != 'barcode' and hasattr(existing_product, key):
+                if key != 'barcode' and key not in datetime_fields and hasattr(existing_product, key):
                     setattr(existing_product, key, value)
-            
+
             # Update timestamps
             existing_product.cached_at = datetime.utcnow()
             existing_product.updated_at = datetime.utcnow()
@@ -81,11 +84,15 @@ def save_product_to_cache(db: Session, product_data: Dict) -> Product:
         else:
             # Create new product
             print(f"Creating new product {barcode} in cache")
-            
+
             # Ensure required fields are present
             if 'product_name' not in product_data or not product_data['product_name']:
                 product_data['product_name'] = 'Unknown'
-            
+
+            # Remove datetime fields - let the model defaults handle them
+            datetime_fields = ['cached_at', 'fetched_at', 'created_at', 'updated_at']
+            product_data = {k: v for k, v in product_data.items() if k not in datetime_fields}
+
             # Create product instance
             product = Product(**product_data)
             

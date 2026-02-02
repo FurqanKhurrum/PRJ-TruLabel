@@ -30,15 +30,16 @@ const getGrade = (scores) => {
 export const buildRecentScanEntry = (scanResult) => {
   const product = scanResult?.product ?? {};
   const assessment = scanResult?.ethical_assessment?.data ?? {};
+  // Use same 3 scores as results page for consistent grading
   const scores = [
     assessment.sustainability_score,
     assessment.labor_practices_score,
     assessment.animal_testing_score,
-    assessment.environmental_impact_score,
   ];
 
   return {
     id: Date.now(),
+    barcode: product.barcode || scanResult.barcode,
     name: product.product_name || "Unknown product",
     brand: product.brand_name || "Unknown brand",
     grade: getGrade(scores),
@@ -48,6 +49,8 @@ export const buildRecentScanEntry = (scanResult) => {
       product.image_small_url ||
       "",
     scannedAt: new Date().toISOString(),
+    // Store full scan result for later viewing
+    fullScanResult: scanResult,
   };
 };
 

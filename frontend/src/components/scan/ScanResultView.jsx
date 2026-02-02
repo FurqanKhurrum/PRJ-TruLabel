@@ -84,6 +84,14 @@ const productTypeConfig = {
 
 const tabs = ["overview", "details", "sources"];
 
+const gradeStyles = {
+  A: "bg-emerald-500 text-white",
+  B: "bg-lime-500 text-white",
+  C: "bg-amber-500 text-white",
+  D: "bg-orange-500 text-white",
+  F: "bg-rose-500 text-white",
+};
+
 const gradeFromScores = (scores) => {
   if (!scores.length) return "-";
   const average = scores.reduce((total, score) => total + score, 0) / scores.length;
@@ -256,7 +264,7 @@ export default function ScanResultView() {
               </p>
             </div>
 
-            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 text-lg font-semibold text-white shadow-sm">
+            <div className={`flex h-14 w-14 items-center justify-center rounded-full text-lg font-semibold shadow-sm ${gradeStyles[grade] ?? "bg-slate-200 text-slate-700"}`}>
               {grade}
             </div>
           </div>
@@ -406,34 +414,38 @@ export default function ScanResultView() {
                 </div>
               )}
 
-              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                <p className="text-xs uppercase tracking-wide text-[color:var(--muted)]">
-                  Category
-                </p>
-                <p className="mt-2 font-semibold text-[color:var(--ink)]">
-                  {product.category || "--"}
-                </p>
-              </div>
+              {product.category && product.category !== "--" && (
+                <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                  <p className="text-xs uppercase tracking-wide text-[color:var(--muted)]">
+                    Category
+                  </p>
+                  <p className="mt-2 font-semibold text-[color:var(--ink)]">
+                    {Array.isArray(product.category) ? product.category.join('') : product.category}
+                  </p>
+                </div>
+              )}
 
               {product.description && (
                 <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
                   <p className="text-xs uppercase tracking-wide text-[color:var(--muted)]">
                     Description
                   </p>
-                  <p className="mt-2 font-semibold text-[color:var(--ink)]">
-                    {product.description}
+                  <p className="mt-2 text-sm leading-relaxed text-[color:var(--ink)]">
+                    {Array.isArray(product.description) ? product.description.join('') : product.description}
                   </p>
                 </div>
               )}
 
-              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                <p className="text-xs uppercase tracking-wide text-[color:var(--muted)]">
-                  Origin
-                </p>
-                <p className="mt-2 font-semibold text-[color:var(--ink)]">
-                  {product.country_of_origin || "--"}
-                </p>
-              </div>
+              {product.country_of_origin && product.country_of_origin !== "--" && (
+                <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                  <p className="text-xs uppercase tracking-wide text-[color:var(--muted)]">
+                    Origin
+                  </p>
+                  <p className="mt-2 font-semibold text-[color:var(--ink)]">
+                    {product.country_of_origin.replace(/^en:|^fr:|^es:/, '').trim()}
+                  </p>
+                </div>
+              )}
 
               {/* Show Eco Score only for food/cosmetics */}
               {(productType === "food" || productType === "cosmetics") && (

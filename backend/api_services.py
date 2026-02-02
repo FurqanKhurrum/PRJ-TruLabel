@@ -213,6 +213,17 @@ class BarcodeLookupService(ProductAPIService):
                 if data.get("products"):
                     product = data["products"][0]
                     
+                    # Handle stores - can be list of strings or list of dicts
+                    stores_data = product.get("stores", [])
+                    if stores_data and isinstance(stores_data[0], dict):
+                        # Extract store names from dict objects
+                        stores_str = ", ".join([store.get("name", "") for store in stores_data if isinstance(store, dict)])
+                    elif stores_data and isinstance(stores_data[0], str):
+                        # Already strings, just join
+                        stores_str = ", ".join(stores_data)
+                    else:
+                        stores_str = ""
+
                     return {
                         "source": self.service_name,
                         "product_type": product.get("category", "general"),
@@ -223,7 +234,7 @@ class BarcodeLookupService(ProductAPIService):
                         "description": product.get("description", ""),
                         "image_url": product.get("images", [""])[0] if product.get("images") else "",
                         "images": product.get("images", []),
-                        "stores": ", ".join(product.get("stores", [])),
+                        "stores": stores_str,
                         "asin": product.get("asin", ""),
                         "link": f"https://www.barcodelookup.com/{barcode}",
                         "raw_api_data": product
@@ -297,14 +308,12 @@ class ProductAPIAggregator:
     """
     
     def __init__(self, barcode_lookup_api_key: str = None):
-        # Initialize all services
+        # Initialize all services - using only open databases
         self.services: List[ProductAPIService] = [
-            OpenFoodFactsService(),           # Try food API first
-            UPCItemDBService(),                # Then general products
-            OpenBeautyFactsService(),          # Then cosmetics
-            BarcodeLookupService(barcode_lookup_api_key),  # Finally premium API if configured
+            OpenFoodFactsService(),           # Food and beverage products
+            OpenBeautyFactsService(),          # Cosmetics and beauty products
         ]
-        
+
         logger.info(f"Initialized {len(self.services)} product API services")
     
     async def fetch_product(self, barcode: str, preferred_type: str = None) -> Optional[Dict[str, Any]]:

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { getRecentScans } from "@/lib/storage";
 
 const gradeStyles = {
@@ -12,7 +13,22 @@ const gradeStyles = {
 };
 
 export default function RecentScans() {
-  const [scans] = useState(() => getRecentScans());
+  const [scans, setScans] = useState([]);
+  const router = useRouter();
+
+  useEffect(() => {
+    // Load scans only on client side after mount
+    setScans(getRecentScans());
+  }, []);
+
+  const handleScanClick = (scan) => {
+    if (!scan.fullScanResult) return;
+
+    // Save the stored scan result to sessionStorage
+    sessionStorage.setItem('trulabel:lastScan', JSON.stringify(scan.fullScanResult));
+    // Navigate to scan result page
+    router.push('/scan-result');
+  };
 
   if (scans.length === 0) {
     return (
@@ -48,7 +64,8 @@ export default function RecentScans() {
         {scans.map((scan) => (
           <article
             key={scan.id}
-            className="flex items-center gap-4 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm"
+            onClick={() => handleScanClick(scan)}
+            className="flex items-center gap-4 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm cursor-pointer transition hover:shadow-md hover:border-emerald-100"
           >
             {scan.image ? (
               <img

@@ -25,7 +25,7 @@ import re
 
 # Import database components
 from database import init_db, get_db
-from enhanced_product_model import Product, ScanHistory  # Use enhanced model
+from product_model import Product, ScanHistory
 from product_service import (
     get_product_from_cache,
     save_product_to_cache,
@@ -203,7 +203,7 @@ async def assess_product_ethics(
             response = await asyncio.wait_for(
                 asyncio.to_thread(
                     client.models.generate_content,
-                    model="gemini-2.0-flash-exp",
+                    model="gemini-2.5-flash",
                     contents=prompt
                 ),
                 timeout=AI_TIMEOUT
@@ -384,7 +384,11 @@ async def scan_product(file: UploadFile = File(...), db: Session = Depends(get_d
     
     # Save to cache
     print("💾 Saving to cache...")
-    saved_product = save_product_to_cache(db, {"barcode": barcode, **product_info})
+    # Map 'source' to 'data_source' for database model
+    cache_data = {"barcode": barcode, **product_info}
+    if 'source' in cache_data:
+        cache_data['data_source'] = cache_data.pop('source')
+    saved_product = save_product_to_cache(db, cache_data)
     
     # Record scan
     scan_history = ScanHistory(
@@ -454,8 +458,12 @@ async def get_product(barcode: str, db: Session = Depends(get_db)):
             status_code=404,
             detail=f"Product {barcode} not found"
         )
-    
-    saved_product = save_product_to_cache(db, {"barcode": barcode, **product_info})
+
+    # Map 'source' to 'data_source' for database model
+    cache_data = {"barcode": barcode, **product_info}
+    if 'source' in cache_data:
+        cache_data['data_source'] = cache_data.pop('source')
+    saved_product = save_product_to_cache(db, cache_data)
     
     scan_history = ScanHistory(
         barcode=barcode,
