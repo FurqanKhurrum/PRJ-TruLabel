@@ -1,3 +1,13 @@
+"""
+TruLabel Enhanced Backend API
+Multi-Source Product Scanner supporting:
+- Food & Beverages (Open Food Facts)
+- Electronics & General Products (UPC Item DB)
+- Cosmetics & Beauty (Open Beauty Facts)
+- Books (ISBN detection)
+- General Retail (Barcode Lookup API)
+"""
+
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from barcode_service import BarcodeService
@@ -5,7 +15,6 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 import os
-import httpx
 import google.genai as genai
 from dotenv import load_dotenv
 import logging
@@ -16,7 +25,7 @@ import re
 
 # Import database components
 from database import init_db, get_db
-from product_model import Product, ScanHistory
+from enhanced_product_model import Product, ScanHistory  # Use enhanced model
 from product_service import (
     get_product_from_cache,
     save_product_to_cache,
@@ -26,21 +35,22 @@ from product_service import (
     clear_stale_cache
 )
 
+# Import new API aggregator
+from api_services import ProductAPIAggregator, detect_barcode_type
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-
-# Set your app logger to DEBUG to see detailed logs
 logger.setLevel(logging.DEBUG)
 
-# Optionally suppress verbose logs from other libraries
+# Suppress verbose logs
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("google_genai").setLevel(logging.WARNING)
 
-# Load environment variables from .env file
+# Load environment variables
 load_dotenv()
 
 # Configure Google Generative AI
@@ -51,20 +61,35 @@ if not api_key:
 
 client = genai.Client(api_key=api_key)
 
+# Initialize API Aggregator (optionally with Barcode Lookup API key)
+barcode_lookup_key = os.getenv("BARCODE_LOOKUP_API_KEY")  # Optional
+api_aggregator = ProductAPIAggregator(barcode_lookup_api_key=barcode_lookup_key)
+
 app = FastAPI(
-    title="TruLabel API with Database Caching",
-    description="Ethical Consumer Product Scanner with AI Assessment & Database Caching",
-    version="2.0.0"
+    title="TruLabel Multi-Source API",
+    description="Ethical Consumer Product Scanner - Food, Electronics, Books, Cosmetics & More",
+    version="3.0.0"
 )
 
 @app.on_event("startup")
 async def startup_event():
     """Initialize database on startup"""
-    print("\n" + "="*60)
-    print("TruLabel API Server Starting...")
-    print("="*60)
+    print("\n" + "="*70)
+    print("🚀 TruLabel Multi-Source API Server Starting...")
+    print("="*70)
     init_db()
-    print("="*60 + "\n")
+    
+    print("\n📡 Configured API Sources:")
+    for service in api_aggregator.services:
+        types = ", ".join(service.product_types)
+        print(f"   ✓ {service.service_name}: {types}")
+    
+    print("\n🎯 Supported Product Types:")
+    types = api_aggregator.get_supported_product_types()
+    for ptype in types:
+        print(f"   • {ptype}")
+    
+    print("="*70 + "\n")
 
 # Enable CORS
 app.add_middleware(
@@ -79,16 +104,44 @@ barcode_service = BarcodeService()
 
 # Configuration constants
 MAX_RETRIES = 3
-RETRY_DELAY = 1  # seconds
-AI_TIMEOUT = 30  # seconds
+RETRY_DELAY = 1
+AI_TIMEOUT = 30
 
-# Prompt template for ethical assessment
-ETHICAL_ASSESSMENT_PROMPT = """You are an ethical product assessment AI. Analyze this product and return ONLY a JSON object with the following structure:
+# Enhanced AI prompt for different product types
+ETHICAL_ASSESSMENT_PROMPT = """You are an ethical product assessment AI. Analyze this product and return ONLY a JSON object.
 
 Product: {product_name}
 Brand: {brand_name}
+Type: {product_type}
 Category: {category}
+Description: {description}
 Labels: {labels}
+
+Based on the product type "{product_type}", provide appropriate ethical scores:
+
+For FOOD products, focus on:
+- Sustainability: organic farming, carbon footprint, packaging
+- Labor: fair trade, worker conditions
+- Environmental: local sourcing, seasonal production
+- Health: nutritional value, additives
+
+For ELECTRONICS products, focus on:
+- Sustainability: e-waste, recyclability, repairability
+- Labor: supply chain ethics, conflict minerals
+- Environmental: energy efficiency, toxic materials
+- Durability: planned obsolescence, warranty
+
+For COSMETICS products, focus on:
+- Animal Testing: cruelty-free status
+- Sustainability: packaging, ingredients sourcing
+- Health: toxic chemicals, allergens
+- Environmental: biodegradability, microplastics
+
+For GENERAL/RETAIL products, focus on:
+- Manufacturing ethics
+- Environmental impact
+- Labor practices
+- Product longevity
 
 Return this exact JSON structure with scores out of 100:
 {{
@@ -100,38 +153,32 @@ Return this exact JSON structure with scores out of 100:
   "animal_testing_description": "<brief 1-2 sentence explanation>",
   "environmental_impact_score": <number 0-100>,
   "environmental_impact_description": "<brief 1-2 sentence explanation>",
-  "overall_recommendation": "<SHORT recommendation: 'Highly Recommended', 'Recommended', 'Consider Alternatives', or 'Avoid'>",
+  "overall_recommendation": "<SHORT: 'Highly Recommended', 'Recommended', 'Consider Alternatives', or 'Avoid'>",
   "key_concerns": ["<concern 1>", "<concern 2>"],
   "positive_attributes": ["<positive 1>", "<positive 2>"]
 }}
 
-Base your scores on:
-- Sustainability: carbon footprint, renewable energy, waste management, packaging
-- Labor Practices: working conditions, fair wages, employee rights, supply chain transparency
-- Animal Testing: cruelty-free certifications, testing policies
-- Environmental Impact: resource usage, pollution, ecological footprint
-
 Return ONLY the JSON object, no other text."""
+
 
 class AIServiceError(Exception):
     """Custom exception for AI service errors"""
     pass
 
+
 async def assess_product_ethics(
-    product_name: str, 
+    product_name: str,
     brand_name: str,
+    product_type: str = "general",
     category: str = "Unknown",
+    description: str = "",
     labels: str = "",
     retry_count: int = 0
 ) -> Optional[Dict[str, Any]]:
     """
-    Call AI API to assess product for ethical consumers with robust error handling
-    
-    Returns:
-        Dict with structured assessment data, or None if all retries fail
+    Enhanced AI assessment supporting multiple product types
     """
     try:
-        # Validate inputs
         if not product_name or product_name == "Unknown":
             logger.warning("Product name is unknown or empty")
             return {
@@ -139,30 +186,29 @@ async def assess_product_ethics(
                 "error": "Product name not available"
             }
         
-        # Format the prompt with product info
+        # Format prompt with enhanced product info
         prompt = ETHICAL_ASSESSMENT_PROMPT.format(
             product_name=product_name,
             brand_name=brand_name if brand_name != "Unknown" else "Not specified",
+            product_type=product_type,
             category=category if category else "Unknown",
+            description=description[:200] if description else "Not available",
             labels=labels if labels else "None"
         )
         
-        logger.info(f"Sending prompt to AI API (attempt {retry_count + 1}/{MAX_RETRIES})")
-        logger.debug(f"Prompt:\n{prompt}")
-        print(f"\n{'='*60}\n🔵 PROMPT SENT TO AI (Attempt {retry_count + 1})\n{'='*60}\n{prompt}\n{'='*60}\n")
+        logger.info(f"Sending {product_type} product to AI (attempt {retry_count + 1}/{MAX_RETRIES})")
+        print(f"\n{'='*70}\n🤖 AI Assessment Request ({product_type})\n{'='*70}")
         
-        # Call the AI API with timeout
         try:
             response = await asyncio.wait_for(
                 asyncio.to_thread(
                     client.models.generate_content,
-                    model="models/gemini-2.5-flash-lite",
+                    model="gemini-2.0-flash-exp",
                     contents=prompt
                 ),
                 timeout=AI_TIMEOUT
             )
             
-            # Extract and validate response
             if not response or not hasattr(response, 'text'):
                 raise AIServiceError("Invalid response from AI service")
             
@@ -171,9 +217,8 @@ async def assess_product_ethics(
             if not assessment_text or len(assessment_text.strip()) < 10:
                 raise AIServiceError("AI response is empty or too short")
             
-            logger.info(f"AI Response received successfully ({len(assessment_text)} chars)")
-            logger.debug(f"Response:\n{assessment_text}")
-            print(f"\n{'='*60}\n✅ AI RESPONSE RECEIVED ({len(assessment_text)} chars)\n{'='*60}\n{assessment_text}\n{'='*60}\n")
+            logger.info(f"✓ AI Response received ({len(assessment_text)} chars)")
+            print(f"✅ AI Assessment Complete\n{'='*70}\n")
             
             # Parse JSON from response
             parsed_data = parse_ai_json_response(assessment_text)
@@ -185,7 +230,6 @@ async def assess_product_ethics(
                     "error": None
                 }
             else:
-                # Fallback if JSON parsing fails
                 return {
                     "status": "success",
                     "raw_assessment": assessment_text,
@@ -195,21 +239,21 @@ async def assess_product_ethics(
         except asyncio.TimeoutError:
             error_msg = f"AI API timeout after {AI_TIMEOUT} seconds"
             logger.error(error_msg)
-            print(f"\n⏰ TIMEOUT ERROR: {error_msg}\n")
             raise AIServiceError(error_msg)
         
         except Exception as api_error:
             error_msg = f"{type(api_error).__name__}: {api_error}"
-            logger.error(f"AI API call error: {error_msg}")
-            print(f"\n❌ API ERROR: {error_msg}\n")
+            logger.error(f"AI API error: {error_msg}")
             raise AIServiceError(f"AI API error: {str(api_error)}")
     
     except AIServiceError as e:
-        # Retry logic for transient errors
         if retry_count < MAX_RETRIES - 1:
             logger.warning(f"Retrying AI request in {RETRY_DELAY} seconds...")
             await asyncio.sleep(RETRY_DELAY)
-            return await assess_product_ethics(product_name, brand_name, category, labels, retry_count + 1)
+            return await assess_product_ethics(
+                product_name, brand_name, product_type, 
+                category, description, labels, retry_count + 1
+            )
         else:
             logger.error(f"All retry attempts exhausted: {e}")
             return {
@@ -218,86 +262,49 @@ async def assess_product_ethics(
             }
     
     except Exception as e:
-        # Catch-all for unexpected errors
-        logger.error(f"Unexpected error in assess_product_ethics: {type(e).__name__}: {e}")
+        logger.error(f"Unexpected error: {type(e).__name__}: {e}")
         return {
             "status": "error",
             "error": f"Unexpected error: {str(e)}"
         }
 
-def parse_ai_json_response(text: str) -> Optional[Dict[str, Any]]:
-    """
-    Extract and parse JSON from AI response text
-    """
+
+def parse_ai_json_response(text: str) -> Optional[Dict]:
+    """Parse JSON from AI response, handling markdown code blocks"""
     try:
-        # Try to parse the entire response as JSON first
-        return json.loads(text)
-    except json.JSONDecodeError:
-        # Try to find JSON within the text
+        # Remove markdown code blocks if present
+        text = text.strip()
+        if text.startswith("```json"):
+            text = text[7:]
+        if text.startswith("```"):
+            text = text[3:]
+        if text.endswith("```"):
+            text = text[:-3]
+        
+        text = text.strip()
+        
+        # Try to find JSON object
         json_match = re.search(r'\{.*\}', text, re.DOTALL)
         if json_match:
-            try:
-                return json.loads(json_match.group())
-            except json.JSONDecodeError:
-                logger.warning("Found JSON-like text but could not parse it")
-                return None
-        logger.warning("Could not extract JSON from AI response")
+            json_str = json_match.group(0)
+            return json.loads(json_str)
+        
+        return json.loads(text)
+        
+    except Exception as e:
+        logger.error(f"Error parsing AI JSON: {e}")
         return None
 
-@app.get("/")
-async def root():
-    """API welcome message"""
-    return {
-        "message": "TruLabel API - Product Scanner with Database Caching",
-        "version": "2.0.0",
-        "features": ["Barcode scanning", "AI ethics assessment", "Database caching", "Scan history"],
-        "endpoints": {
-            "scan": "POST /api/scan-image",
-            "lookup": "GET /api/product/{barcode}",
-            "history": "GET /api/history",
-            "cache_stats": "GET /api/cache/stats",
-            "health": "GET /api/health",
-            "test_ui": "GET /test"
-        }
-    }
 
-@app.get("/api/health")
-async def health_check(db: Session = Depends(get_db)):
-    """Health check endpoint with cache stats and AI service status"""
-    stats = get_cache_stats(db)
-    
-    ai_status = "unknown"
-    try:
-        # Quick test of AI service
-        test_response = await asyncio.wait_for(
-            asyncio.to_thread(
-                client.models.generate_content,
-                model="models/gemini-2.5-flash-lite",
-                contents="test"
-            ),
-            timeout=5.0
-        )
-        ai_status = "healthy" if test_response else "unhealthy"
-    except Exception as e:
-        logger.warning(f"AI health check failed: {e}")
-        ai_status = "unhealthy"
-    
-    return {
-        "status": "healthy",
-        "message": "API is running with database caching",
-        "ai_service": ai_status,
-        "cache_stats": stats
-    }
-
-@app.post("/api/scan-image")
-async def scan_image(file: UploadFile = File(...), db: Session = Depends(get_db)):
+@app.post("/api/scan")
+async def scan_product(file: UploadFile = File(...), db: Session = Depends(get_db)):
     """
-    Upload an image and extract barcode
-    Returns product information with database caching
+    Enhanced scan endpoint supporting multiple product types
+    Automatically detects barcode and tries appropriate APIs
     """
-    print("\n" + "="*60)
-    print("NEW SCAN REQUEST")
-    print("="*60)
+    print("\n" + "="*70)
+    print("📸 NEW SCAN REQUEST")
+    print("="*70)
     
     if not file.content_type.startswith('image/'):
         raise HTTPException(
@@ -308,7 +315,8 @@ async def scan_image(file: UploadFile = File(...), db: Session = Depends(get_db)
     image_bytes = await file.read()
     print(f"📷 Image uploaded: {len(image_bytes)} bytes")
     
-    print("🔍 Extracting barcode from image...")
+    # Extract barcode
+    print("🔍 Extracting barcode...")
     barcode = barcode_service.extract_barcode_from_image(image_bytes)
     
     if not barcode:
@@ -319,62 +327,90 @@ async def scan_image(file: UploadFile = File(...), db: Session = Depends(get_db)
     
     print(f"✓ Barcode extracted: {barcode}")
     
+    # Detect barcode type for smarter API selection
+    barcode_type_hint = detect_barcode_type(barcode)
+    print(f"🎯 Barcode type hint: {barcode_type_hint}")
+    
+    # Check cache
     print("💾 Checking database cache...")
     cached_product = get_product_from_cache(db, barcode, cache_days=7)
     
     if cached_product:
-        print(f"⚡ CACHE HIT! Using cached data for {barcode}")
-        add_scan_to_history(db, barcode)
+        print(f"⚡ CACHE HIT! Using cached data")
+        
+        # Record scan
+        scan_history = ScanHistory(
+            barcode=barcode,
+            product_type=cached_product.product_type,
+            data_source=cached_product.data_source,
+            cache_hit=True
+        )
+        db.add(scan_history)
+        db.commit()
         
         product_dict = cached_product.to_dict()
         product_dict['cache_hit'] = True
         
-        # Call AI assessment for cached product
+        # AI assessment
         ethical_result = await assess_product_ethics(
             product_name=product_dict.get("product_name", "Unknown"),
             brand_name=product_dict.get("brand_name", "Unknown"),
+            product_type=product_dict.get("product_type", "general"),
             category=product_dict.get("category", ""),
+            description=product_dict.get("description", ""),
             labels=product_dict.get("labels", "")
         )
         
-        print("="*60 + "\n")
+        print("="*70 + "\n")
         return {
             "barcode": barcode,
             "product": product_dict,
             "ethical_assessment": ethical_result
         }
     
-    print(f"❌ Cache miss for {barcode}")
-    print("🌐 Fetching from Open Food Facts API...")
-    
-    product_info = await fetch_product_from_openfoodfacts(barcode)
+    # Fetch from APIs
+    print(f"❌ Cache miss - fetching from API sources...")
+    product_info = await api_aggregator.fetch_product(barcode, preferred_type=barcode_type_hint)
     
     if not product_info:
         raise HTTPException(
             status_code=404,
-            detail=f"Barcode {barcode} not found in product database"
+            detail=f"Product {barcode} not found in any database. Barcode may be invalid or not in our sources."
         )
     
-    print(f"✓ Product found: {product_info.get('product_name', 'Unknown')}")
+    print(f"✓ Product found: {product_info.get('product_name')}")
+    print(f"  Source: {product_info.get('source')}")
+    print(f"  Type: {product_info.get('product_type')}")
     
-    print("💾 Saving to database cache...")
+    # Save to cache
+    print("💾 Saving to cache...")
     saved_product = save_product_to_cache(db, {"barcode": barcode, **product_info})
     
-    add_scan_to_history(db, barcode)
+    # Record scan
+    scan_history = ScanHistory(
+        barcode=barcode,
+        product_type=saved_product.product_type,
+        data_source=saved_product.data_source,
+        cache_hit=False
+    )
+    db.add(scan_history)
+    db.commit()
     
     result_dict = saved_product.to_dict()
     result_dict['cache_hit'] = False
     
-    # Call AI assessment for new product
+    # AI assessment
     ethical_result = await assess_product_ethics(
         product_name=result_dict.get("product_name", "Unknown"),
         brand_name=result_dict.get("brand_name", "Unknown"),
+        product_type=result_dict.get("product_type", "general"),
         category=result_dict.get("category", ""),
+        description=result_dict.get("description", ""),
         labels=result_dict.get("labels", "")
     )
     
     print("✓ Scan complete!")
-    print("="*60 + "\n")
+    print("="*70 + "\n")
     
     return {
         "barcode": barcode,
@@ -382,16 +418,25 @@ async def scan_image(file: UploadFile = File(...), db: Session = Depends(get_db)
         "ethical_assessment": ethical_result
     }
 
+
 @app.get("/api/product/{barcode}")
 async def get_product(barcode: str, db: Session = Depends(get_db)):
-    """Get product by barcode with caching"""
-    print(f"\n🔍 Direct lookup for barcode: {barcode}")
+    """Get product by barcode"""
+    print(f"\n🔍 Direct lookup: {barcode}")
     
     cached_product = get_product_from_cache(db, barcode, cache_days=7)
     
     if cached_product:
-        print(f"⚡ Cache hit for {barcode}")
-        add_scan_to_history(db, barcode)
+        print(f"⚡ Cache hit")
+        
+        scan_history = ScanHistory(
+            barcode=barcode,
+            product_type=cached_product.product_type,
+            data_source=cached_product.data_source,
+            cache_hit=True
+        )
+        db.add(scan_history)
+        db.commit()
         
         product_dict = cached_product.to_dict()
         product_dict['cache_hit'] = True
@@ -401,8 +446,8 @@ async def get_product(barcode: str, db: Session = Depends(get_db)):
             "product": product_dict
         }
     
-    print(f"🌐 Fetching {barcode} from API...")
-    product_info = await fetch_product_from_openfoodfacts(barcode)
+    barcode_type_hint = detect_barcode_type(barcode)
+    product_info = await api_aggregator.fetch_product(barcode, preferred_type=barcode_type_hint)
     
     if not product_info:
         raise HTTPException(
@@ -411,7 +456,15 @@ async def get_product(barcode: str, db: Session = Depends(get_db)):
         )
     
     saved_product = save_product_to_cache(db, {"barcode": barcode, **product_info})
-    add_scan_to_history(db, barcode)
+    
+    scan_history = ScanHistory(
+        barcode=barcode,
+        product_type=saved_product.product_type,
+        data_source=saved_product.data_source,
+        cache_hit=False
+    )
+    db.add(scan_history)
+    db.commit()
     
     result_dict = saved_product.to_dict()
     result_dict['cache_hit'] = False
@@ -420,56 +473,6 @@ async def get_product(barcode: str, db: Session = Depends(get_db)):
         "barcode": barcode,
         "product": result_dict
     }
-
-async def fetch_product_from_openfoodfacts(barcode: str):
-    """Fetch product from Open Food Facts API"""
-    url = f"https://world.openfoodfacts.org/api/v0/product/{barcode}.json"
-    
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url, timeout=10.0)
-            response.raise_for_status()
-            
-            data = response.json()
-            
-            if data.get("status") == 1:
-                product = data.get("product", {})
-                
-                # Extract relevant fields
-                return {
-                    "product_name": product.get("product_name", "Unknown"),
-                    "brand_name": product.get("brands", "Unknown"),
-                    "brand_owner": product.get("brand_owner", ""),
-                    "quantity": product.get("quantity", ""),
-                    "image_url": product.get("image_url", ""),
-                    "image_front_url": product.get("image_front_url", ""),
-                    "image_small_url": product.get("image_small_url", ""),
-                    "country_of_origin": product.get("countries", "Unknown"),
-                    "origins": product.get("origins", ""),
-                    "manufacturing_places": product.get("manufacturing_places", ""),
-                    "category": product.get("categories", ""),
-                    "ingredients": product.get("ingredients_text", ""),
-                    "allergens": product.get("allergens", ""),
-                    "traces": product.get("traces", ""),
-                    "labels": product.get("labels", ""),
-                    "packaging": product.get("packaging", ""),
-                    "packaging_text": product.get("packaging_text", ""),
-                    "stores": product.get("stores", ""),
-                    "purchase_places": product.get("purchase_places", ""),
-                    "nutriscore_grade": product.get("nutriscore_grade", ""),
-                    "nutriscore_score": product.get("nutriscore_score", None),
-                    "ecoscore": product.get("ecoscore_score", None),
-                    "ecoscore_grade": product.get("ecoscore_grade", ""),
-                    "completeness": product.get("completeness", 0),
-                    "link": product.get("link", ""),
-                    "raw_api_data": product
-                }
-            else:
-                return None
-                
-    except Exception as e:
-        logger.error(f"Error fetching product: {e}")
-        return None
 
 
 @app.get("/api/history")
@@ -484,14 +487,31 @@ async def get_history(limit: int = 20, db: Session = Depends(get_db)):
 
 @app.get("/api/cache/stats")
 async def cache_statistics(db: Session = Depends(get_db)):
-    """Get cache statistics"""
+    """Enhanced cache statistics with product type breakdown"""
+    from sqlalchemy import func
+    
     stats = get_cache_stats(db)
+    
+    # Add product type breakdown
+    type_breakdown = db.query(
+        Product.product_type,
+        func.count(Product.barcode)
+    ).group_by(Product.product_type).all()
+    
+    source_breakdown = db.query(
+        Product.data_source,
+        func.count(Product.barcode)
+    ).group_by(Product.data_source).all()
+    
+    stats["products_by_type"] = {ptype: count for ptype, count in type_breakdown}
+    stats["products_by_source"] = {source: count for source, count in source_breakdown}
+    
     return stats
 
 
 @app.delete("/api/cache/clear-stale")
 async def clear_stale(days: int = 30, db: Session = Depends(get_db)):
-    """Clear products older than specified days from cache"""
+    """Clear stale cache"""
     count = clear_stale_cache(db, days=days)
     return {
         "message": f"Cleared {count} stale products",
@@ -499,21 +519,39 @@ async def clear_stale(days: int = 30, db: Session = Depends(get_db)):
     }
 
 
-# Serve static files
-app.mount("/static", StaticFiles(directory="static"), name="static")
+@app.get("/api/sources")
+async def get_api_sources():
+    """Get information about configured API sources"""
+    sources = []
+    for service in api_aggregator.services:
+        sources.append({
+            "name": service.service_name,
+            "product_types": service.product_types
+        })
+    
+    return {
+        "configured_sources": sources,
+        "supported_types": api_aggregator.get_supported_product_types()
+    }
 
-@app.get("/test")
-async def serve_test_page():
-    """Serve the image upload test page"""
-    return FileResponse("static/index.html")
+
+# Serve static files
+if os.path.exists("static"):
+    app.mount("/static", StaticFiles(directory="static"), name="static")
+    
+    @app.get("/test")
+    async def serve_test_page():
+        """Serve the image upload test page"""
+        return FileResponse("static/index.html")
+
 
 if __name__ == "__main__":
     import uvicorn
-    print("=" * 60)
-    print("TruLabel API Server - With Database Caching & AI Assessment")
-    print("=" * 60)
-    print("Starting server on http://localhost:8000")
+    print("=" * 70)
+    print("🚀 TruLabel Multi-Source API Server")
+    print("=" * 70)
+    print("Server: http://localhost:8000")
     print("API Docs: http://localhost:8000/docs")
     print("Test Interface: http://localhost:8000/test")
-    print("=" * 60)
+    print("=" * 70)
     uvicorn.run(app, host="0.0.0.0", port=8000)

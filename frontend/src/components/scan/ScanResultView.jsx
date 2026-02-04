@@ -53,6 +53,35 @@ const scoreIcons = {
   ),
 };
 
+// Product type icons and colors
+const productTypeConfig = {
+  food: {
+    icon: "🍎",
+    color: "emerald",
+    label: "Food & Beverage"
+  },
+  electronics: {
+    icon: "📱",
+    color: "blue",
+    label: "Electronics"
+  },
+  cosmetics: {
+    icon: "💄",
+    color: "pink",
+    label: "Cosmetics"
+  },
+  book: {
+    icon: "📚",
+    color: "amber",
+    label: "Book"
+  },
+  general: {
+    icon: "📦",
+    color: "slate",
+    label: "General Product"
+  }
+};
+
 const tabs = ["overview", "details", "sources"];
 
 const gradeFromScores = (scores) => {
@@ -75,6 +104,10 @@ export default function ScanResultView() {
 
   const product = scanResult?.product ?? null;
   const assessment = scanResult?.ethical_assessment?.data ?? null;
+
+  // Get product type configuration
+  const productType = product?.product_type || "general";
+  const typeConfig = productTypeConfig[productType] || productTypeConfig.general;
 
   const scores = useMemo(() => {
     if (!assessment) return [];
@@ -185,6 +218,19 @@ export default function ScanResultView() {
         </Link>
 
         <section className="rounded-3xl bg-white p-5 shadow-sm">
+          {/* Product Type Badge - NEW! */}
+          <div className="mb-3 flex items-center justify-between">
+            <span className={`inline-flex items-center gap-1.5 rounded-full bg-${typeConfig.color}-50 px-3 py-1 text-xs font-semibold text-${typeConfig.color}-700`}>
+              <span>{typeConfig.icon}</span>
+              <span>{typeConfig.label}</span>
+            </span>
+            {product.data_source && (
+              <span className="text-xs text-slate-500">
+                {product.data_source}
+              </span>
+            )}
+          </div>
+
           <div className="flex items-center gap-4">
             {image ? (
               <img
@@ -193,8 +239,8 @@ export default function ScanResultView() {
                 className="h-20 w-20 rounded-2xl object-cover"
               />
             ) : (
-              <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-200 via-amber-100 to-emerald-100 text-sm font-semibold text-emerald-700">
-                Product
+              <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-200 via-amber-100 to-emerald-100 text-2xl">
+                {typeConfig.icon}
               </div>
             )}
 
@@ -203,7 +249,7 @@ export default function ScanResultView() {
                 {product.product_name || "Scanned Product"}
               </h1>
               <p className="text-sm text-[color:var(--muted)]">
-                {product.brand_name || "Unknown brand"}
+                {product.brand_name || product.manufacturer || "Unknown brand"}
               </p>
               <p className="text-sm text-[color:var(--muted)]">
                 Origin: {product.country_of_origin || "--"}
@@ -322,6 +368,44 @@ export default function ScanResultView() {
                   {scanResult.barcode || "--"}
                 </p>
               </div>
+
+              {/* Product Type Specific Fields - NEW! */}
+              {productType === "electronics" && (
+                <>
+                  {product.model && (
+                    <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                      <p className="text-xs uppercase tracking-wide text-[color:var(--muted)]">
+                        Model
+                      </p>
+                      <p className="mt-2 font-semibold text-[color:var(--ink)]">
+                        {product.model}
+                      </p>
+                    </div>
+                  )}
+                  {product.mpn && (
+                    <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                      <p className="text-xs uppercase tracking-wide text-[color:var(--muted)]">
+                        MPN
+                      </p>
+                      <p className="mt-2 font-semibold text-[color:var(--ink)]">
+                        {product.mpn}
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {productType === "book" && product.isbn && (
+                <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                  <p className="text-xs uppercase tracking-wide text-[color:var(--muted)]">
+                    ISBN
+                  </p>
+                  <p className="mt-2 font-semibold text-[color:var(--ink)]">
+                    {product.isbn}
+                  </p>
+                </div>
+              )}
+
               <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
                 <p className="text-xs uppercase tracking-wide text-[color:var(--muted)]">
                   Category
@@ -330,6 +414,18 @@ export default function ScanResultView() {
                   {product.category || "--"}
                 </p>
               </div>
+
+              {product.description && (
+                <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                  <p className="text-xs uppercase tracking-wide text-[color:var(--muted)]">
+                    Description
+                  </p>
+                  <p className="mt-2 font-semibold text-[color:var(--ink)]">
+                    {product.description}
+                  </p>
+                </div>
+              )}
+
               <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
                 <p className="text-xs uppercase tracking-wide text-[color:var(--muted)]">
                   Origin
@@ -338,14 +434,18 @@ export default function ScanResultView() {
                   {product.country_of_origin || "--"}
                 </p>
               </div>
-              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                <p className="text-xs uppercase tracking-wide text-[color:var(--muted)]">
-                  Eco Score
-                </p>
-                <p className="mt-2 font-semibold text-[color:var(--ink)]">
-                  {product.ecoscore ? `${product.ecoscore}/100` : "--"}
-                </p>
-              </div>
+
+              {/* Show Eco Score only for food/cosmetics */}
+              {(productType === "food" || productType === "cosmetics") && (
+                <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                  <p className="text-xs uppercase tracking-wide text-[color:var(--muted)]">
+                    Eco Score
+                  </p>
+                  <p className="mt-2 font-semibold text-[color:var(--ink)]">
+                    {product.ecoscore ? `${product.ecoscore}/100` : "--"}
+                  </p>
+                </div>
+              )}
             </div>
           </section>
         ) : null}
@@ -356,19 +456,52 @@ export default function ScanResultView() {
               Data Sources
             </h2>
             <ul className="mt-4 space-y-3 text-sm text-[color:var(--muted)]">
-              <li className="flex items-center gap-3">
-                <span className="h-2 w-2 rounded-full bg-sky-500"></span>
-                <span>Open Food Facts database</span>
-              </li>
+              {/* Dynamic source display based on actual source - NEW! */}
+              {product.data_source === "OpenFoodFacts" && (
+                <li className="flex items-center gap-3">
+                  <span className="h-2 w-2 rounded-full bg-sky-500"></span>
+                  <span>Open Food Facts database</span>
+                </li>
+              )}
+              {product.data_source === "UPCItemDB" && (
+                <li className="flex items-center gap-3">
+                  <span className="h-2 w-2 rounded-full bg-blue-500"></span>
+                  <span>UPC Item Database</span>
+                </li>
+              )}
+              {product.data_source === "OpenBeautyFacts" && (
+                <li className="flex items-center gap-3">
+                  <span className="h-2 w-2 rounded-full bg-pink-500"></span>
+                  <span>Open Beauty Facts database</span>
+                </li>
+              )}
+              {product.data_source === "BarcodeLookup" && (
+                <li className="flex items-center gap-3">
+                  <span className="h-2 w-2 rounded-full bg-purple-500"></span>
+                  <span>Barcode Lookup API</span>
+                </li>
+              )}
               <li className="flex items-center gap-3">
                 <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
-                <span>AI ethical analysis</span>
+                <span>AI ethical analysis (Google Gemini)</span>
               </li>
               <li className="flex items-center gap-3">
                 <span className="h-2 w-2 rounded-full bg-amber-500"></span>
                 <span>Environmental impact data</span>
               </li>
             </ul>
+
+            {/* Show cache status - NEW! */}
+            {product.cache_hit !== undefined && (
+              <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                <p className="text-xs uppercase tracking-wide text-[color:var(--muted)]">
+                  Cache Status
+                </p>
+                <p className="mt-2 text-sm font-semibold text-[color:var(--ink)]">
+                  {product.cache_hit ? "✓ Retrieved from cache" : "Fetched from API"}
+                </p>
+              </div>
+            )}
           </section>
         ) : null}
       </div>
