@@ -96,11 +96,34 @@ const gradeStyles = {
 const gradeFromScores = (scores) => {
   if (!scores.length) return "-";
   const average = scores.reduce((total, score) => total + score, 0) / scores.length;
-  if (average >= 90) return "A";
-  if (average >= 80) return "B";
-  if (average >= 70) return "C";
-  if (average >= 60) return "D";
+  if (average >= 80) return "A";
+  if (average >= 70) return "B";
+  if (average >= 60) return "C";
+  if (average >= 50) return "D";
   return "F";
+};
+
+const normalizeSourceUrl = (value) => {
+  if (!value || typeof value !== "string") return "";
+  let trimmed = value.trim();
+  if (!trimmed) return "";
+  if (!/^https?:\/\//i.test(trimmed)) {
+    trimmed = `https://${trimmed}`;
+  }
+  try {
+    // Ensure valid URL and normalize
+    return new URL(trimmed).toString();
+  } catch (error) {
+    return "";
+  }
+};
+
+const getHostFromUrl = (url) => {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch (error) {
+    return "";
+  }
 };
 
 export default function ScanResultView() {
@@ -178,6 +201,44 @@ export default function ScanResultView() {
       },
     ];
   }, [assessment]);
+
+  const sources = useMemo(() => {
+    const list = [];
+    const seen = new Set();
+
+    const addSource = (source) => {
+      if (!source) return;
+      const url = normalizeSourceUrl(source.url ?? source);
+      if (!url) return;
+      const key = url.toLowerCase();
+      if (seen.has(key)) return;
+      const name =
+        (typeof source === "object" && source.name ? source.name.trim() : "") ||
+        getHostFromUrl(url) ||
+        "Source";
+      const host = getHostFromUrl(url);
+      list.push({ name, url, host });
+      seen.add(key);
+    };
+
+    const rawSources = assessment?.sources;
+    if (Array.isArray(rawSources)) {
+      rawSources.forEach(addSource);
+    } else if (rawSources) {
+      addSource(rawSources);
+    }
+
+    if (product?.link) {
+      addSource({
+        name: product.data_source
+          ? `${product.data_source} product page`
+          : "Product page",
+        url: product.link,
+      });
+    }
+
+    return list;
+  }, [assessment, product]);
 
   if (!scanResult || !product) {
     return (
@@ -520,41 +581,52 @@ export default function ScanResultView() {
             <h2 className="text-sm font-semibold text-[color:var(--ink)]">
               Data Sources
             </h2>
-            <ul className="mt-4 space-y-3 text-sm text-[color:var(--muted)]">
-              {/* Dynamic source display based on actual source - NEW! */}
-              {product.data_source === "OpenFoodFacts" && (
-                <li className="flex items-center gap-3">
-                  <span className="h-2 w-2 rounded-full bg-sky-500"></span>
-                  <span>Open Food Facts database</span>
-                </li>
-              )}
-              {product.data_source === "UPCItemDB" && (
-                <li className="flex items-center gap-3">
-                  <span className="h-2 w-2 rounded-full bg-blue-500"></span>
-                  <span>UPC Item Database</span>
-                </li>
-              )}
-              {product.data_source === "OpenBeautyFacts" && (
-                <li className="flex items-center gap-3">
-                  <span className="h-2 w-2 rounded-full bg-pink-500"></span>
-                  <span>Open Beauty Facts database</span>
-                </li>
-              )}
-              {product.data_source === "BarcodeLookup" && (
-                <li className="flex items-center gap-3">
-                  <span className="h-2 w-2 rounded-full bg-purple-500"></span>
-                  <span>Barcode Lookup API</span>
-                </li>
-              )}
-              <li className="flex items-center gap-3">
-                <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
-                <span>AI ethical analysis (Google Gemini)</span>
-              </li>
-              <li className="flex items-center gap-3">
-                <span className="h-2 w-2 rounded-full bg-amber-500"></span>
-                <span>Environmental impact data</span>
-              </li>
-            </ul>
+            {sources.length ? (
+              <ul className="mt-4 space-y-3">
+                {sources.map((source) => (
+                  <li
+                    key={source.url}
+                    className="flex items-center justify-between gap-4 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3"
+                  >
+                    <div>
+                      <p className="text-sm font-semibold text-[color:var(--ink)]">
+                        {source.name}
+                      </p>
+                      <p className="text-xs text-[color:var(--muted)]">
+                        {source.host || source.url}
+                      </p>
+                    </div>
+                    <a
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white text-slate-500 shadow-sm transition hover:text-slate-900"
+                      href={source.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label={`Open source ${source.name}`}
+                    >
+                      <svg
+                        width="18"
+                        height="18"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M14 3h7v7" />
+                        <path d="M10 14 21 3" />
+                        <path d="M21 14v7h-7" />
+                        <path d="M3 10v11h11" />
+                      </svg>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-3 text-sm text-[color:var(--muted)]">
+                No product-related sources were provided for this scan yet.
+              </p>
+            )}
 
             {/* Show cache status - NEW! */}
             {product.cache_hit !== undefined && (
