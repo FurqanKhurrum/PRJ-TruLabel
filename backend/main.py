@@ -116,6 +116,7 @@ Type: {product_type}
 Category: {category}
 Description: {description}
 Labels: {labels}
+Product URL: {product_url}
 
 Based on the product type "{product_type}", provide appropriate ethical scores:
 
@@ -155,8 +156,19 @@ Return this exact JSON structure with scores out of 100:
   "environmental_impact_description": "<brief 1-2 sentence explanation>",
   "overall_recommendation": "<SHORT: 'Highly Recommended', 'Recommended', 'Consider Alternatives', or 'Avoid'>",
   "key_concerns": ["<concern 1>", "<concern 2>"],
-  "positive_attributes": ["<positive 1>", "<positive 2>"]
+  "positive_attributes": ["<positive 1>", "<positive 2>"],
+  "sources": [
+    {{
+      "name": "<source name>",
+      "url": "<https://...>"
+    }}
+  ]
 }}
+
+Rules for sources:
+- Use real, product-related URLs whenever possible (product page, brand site, certification registry, or public database).
+- If Product URL is provided, include it as one of the sources.
+- Provide 1-4 sources. If none are available, return an empty array.
 
 Return ONLY the JSON object, no other text."""
 
@@ -173,6 +185,7 @@ async def assess_product_ethics(
     category: str = "Unknown",
     description: str = "",
     labels: str = "",
+    product_url: str = "",
     retry_count: int = 0
 ) -> Optional[Dict[str, Any]]:
     """
@@ -193,7 +206,8 @@ async def assess_product_ethics(
             product_type=product_type,
             category=category if category else "Unknown",
             description=description[:200] if description else "Not available",
-            labels=labels if labels else "None"
+            labels=labels if labels else "None",
+            product_url=product_url if product_url else "Not available"
         )
         
         logger.info(f"Sending {product_type} product to AI (attempt {retry_count + 1}/{MAX_RETRIES})")
@@ -252,7 +266,7 @@ async def assess_product_ethics(
             await asyncio.sleep(RETRY_DELAY)
             return await assess_product_ethics(
                 product_name, brand_name, product_type, 
-                category, description, labels, retry_count + 1
+                category, description, labels, product_url, retry_count + 1
             )
         else:
             logger.error(f"All retry attempts exhausted: {e}")
@@ -358,7 +372,8 @@ async def scan_product(file: UploadFile = File(...), db: Session = Depends(get_d
             product_type=product_dict.get("product_type", "general"),
             category=product_dict.get("category", ""),
             description=product_dict.get("description", ""),
-            labels=product_dict.get("labels", "")
+            labels=product_dict.get("labels", ""),
+            product_url=product_dict.get("link", "")
         )
         
         print("="*70 + "\n")
@@ -410,7 +425,8 @@ async def scan_product(file: UploadFile = File(...), db: Session = Depends(get_d
         product_type=result_dict.get("product_type", "general"),
         category=result_dict.get("category", ""),
         description=result_dict.get("description", ""),
-        labels=result_dict.get("labels", "")
+        labels=result_dict.get("labels", ""),
+        product_url=result_dict.get("link", "")
     )
     
     print("✓ Scan complete!")

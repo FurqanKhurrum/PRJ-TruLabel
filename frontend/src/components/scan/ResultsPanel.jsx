@@ -7,6 +7,28 @@ const tabs = [
   { id: "sources", label: "Sources" },
 ];
 
+const normalizeSourceUrl = (value) => {
+  if (!value || typeof value !== "string") return "";
+  let trimmed = value.trim();
+  if (!trimmed) return "";
+  if (!/^https?:\/\//i.test(trimmed)) {
+    trimmed = `https://${trimmed}`;
+  }
+  try {
+    return new URL(trimmed).toString();
+  } catch (error) {
+    return "";
+  }
+};
+
+const getHostFromUrl = (url) => {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch (error) {
+    return "";
+  }
+};
+
 function recommendationTone(value) {
   const normalized = value.toLowerCase();
   if (normalized.includes("highly")) return "success";
@@ -25,6 +47,43 @@ export default function ResultsPanel({ results, activeTab, onTabChange }) {
   }
 
   const assessment = results.ethical_assessment?.data;
+  const sources = (() => {
+    const list = [];
+    const seen = new Set();
+
+    const addSource = (source) => {
+      if (!source) return;
+      const url = normalizeSourceUrl(source.url ?? source);
+      if (!url) return;
+      const key = url.toLowerCase();
+      if (seen.has(key)) return;
+      const name =
+        (typeof source === "object" && source.name ? source.name.trim() : "") ||
+        getHostFromUrl(url) ||
+        "Source";
+      const host = getHostFromUrl(url);
+      list.push({ name, url, host });
+      seen.add(key);
+    };
+
+    const rawSources = assessment?.sources;
+    if (Array.isArray(rawSources)) {
+      rawSources.forEach(addSource);
+    } else if (rawSources) {
+      addSource(rawSources);
+    }
+
+    if (results?.product?.link) {
+      addSource({
+        name: results.product.data_source
+          ? `${results.product.data_source} product page`
+          : "Product page",
+        url: results.product.link,
+      });
+    }
+
+    return list;
+  })();
 
   return (
     <section className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--card)] p-8 shadow-soft">
@@ -174,20 +233,52 @@ export default function ResultsPanel({ results, activeTab, onTabChange }) {
             <h3 className="text-sm font-semibold text-[color:var(--ink)]">
               Data Sources
             </h3>
-            <ul className="mt-4 space-y-3 text-sm text-[color:var(--muted)]">
-              <li className="flex items-center gap-3">
-                <span className="h-2 w-2 rounded-full bg-sky-500"></span>
-                <span>Open Food Facts database</span>
-              </li>
-              <li className="flex items-center gap-3">
-                <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
-                <span>AI ethical analysis</span>
-              </li>
-              <li className="flex items-center gap-3">
-                <span className="h-2 w-2 rounded-full bg-amber-500"></span>
-                <span>Environmental impact data</span>
-              </li>
-            </ul>
+            {sources.length ? (
+              <ul className="mt-4 space-y-3">
+                {sources.map((source) => (
+                  <li
+                    key={source.url}
+                    className="flex items-center justify-between gap-4 rounded-2xl border border-[color:var(--border)] bg-[color:var(--canvas)] px-4 py-3"
+                  >
+                    <div>
+                      <p className="text-sm font-semibold text-[color:var(--ink)]">
+                        {source.name}
+                      </p>
+                      <p className="text-xs text-[color:var(--muted)]">
+                        {source.host || source.url}
+                      </p>
+                    </div>
+                    <a
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white text-[color:var(--muted)] shadow-soft transition hover:text-[color:var(--ink)]"
+                      href={source.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label={`Open source ${source.name}`}
+                    >
+                      <svg
+                        width="18"
+                        height="18"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M14 3h7v7" />
+                        <path d="M10 14 21 3" />
+                        <path d="M21 14v7h-7" />
+                        <path d="M3 10v11h11" />
+                      </svg>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-3 text-sm text-[color:var(--muted)]">
+                No product-related sources were provided for this scan yet.
+              </p>
+            )}
           </div>
         </div>
       ) : null}

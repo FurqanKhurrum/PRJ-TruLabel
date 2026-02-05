@@ -20,10 +20,10 @@ const getGrade = (scores) => {
   const average =
     valid.reduce((total, score) => total + score, 0) / valid.length;
 
-  if (average >= 90) return "A";
-  if (average >= 80) return "B";
-  if (average >= 70) return "C";
-  if (average >= 60) return "D";
+ if (average >= 80) return "A";
+  if (average >= 70) return "B";
+  if (average >= 60) return "C";
+  if (average >= 50) return "D";
   return "F";
 };
 
