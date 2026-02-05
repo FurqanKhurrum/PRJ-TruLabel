@@ -56,7 +56,10 @@ frontend/.pnp
 frontend/.pnp.js
 
 # next.js
+.next
 /.next/
+frontend/.next/
+frontend/.next/**
 /out/
 
 # Testing
