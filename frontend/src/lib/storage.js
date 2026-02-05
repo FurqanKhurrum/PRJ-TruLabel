@@ -64,9 +64,20 @@ export const getLastScan = () => {
   return safeParse(sessionStorage.getItem(LAST_SCAN_KEY), null);
 };
 
+export const clearLastScan = () => {
+  if (!isBrowser()) return;
+  sessionStorage.removeItem(LAST_SCAN_KEY);
+};
+
 export const getRecentScans = () => {
   if (!isBrowser()) return [];
   return safeParse(localStorage.getItem(RECENT_SCANS_KEY), []);
+};
+
+export const clearRecentScans = () => {
+  if (!isBrowser()) return [];
+  localStorage.removeItem(RECENT_SCANS_KEY);
+  return [];
 };
 
 export const saveRecentScan = (scanResult) => {
@@ -77,4 +88,10 @@ export const saveRecentScan = (scanResult) => {
 
   localStorage.setItem(RECENT_SCANS_KEY, JSON.stringify(updated));
   return updated;
+};
+
+export const clearScanHistory = () => {
+  if (!isBrowser()) return;
+  clearLastScan();
+  clearRecentScans();
 };

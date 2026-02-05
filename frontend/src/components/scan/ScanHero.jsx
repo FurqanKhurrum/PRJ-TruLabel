@@ -1,9 +1,20 @@
 import { useRef } from "react";
 
-export default function ScanHero({ onFileSelect, isLoading, selectedLabel }) {
+export default function ScanHero({
+  onFileSelect,
+  isLoading,
+  selectedLabel,
+  progress = 0,
+}) {
   const inputRef = useRef(null);
 
   const handlePick = () => inputRef.current?.click();
+  const progressValue = Number.isFinite(progress) ? Math.round(progress) : 0;
+  const statusText = isLoading
+    ? `Scanning... ${progressValue}%`
+    : selectedLabel
+      ? `Selected: ${selectedLabel}`
+      : "Upload an image to start scanning";
 
   return (
     <section className="rounded-[28px] bg-gradient-to-br from-emerald-400 via-emerald-500 to-emerald-600 p-6 text-white shadow-[0_22px_40px_rgba(16,185,129,0.35)]">
@@ -36,12 +47,19 @@ export default function ScanHero({ onFileSelect, isLoading, selectedLabel }) {
       </button>
 
       <div className="mt-4 text-center text-xs text-emerald-100">
-        {isLoading
-          ? "Preparing scan..."
-          : selectedLabel
-            ? `Selected: ${selectedLabel}`
-            : "Upload an image to start scanning"}
+        {statusText}
       </div>
+
+      {isLoading ? (
+        <div className="mt-4">
+          <div className="h-2 w-full rounded-full bg-white/20">
+            <div
+              className="h-full rounded-full bg-white transition-all duration-300"
+              style={{ width: `${progressValue}%` }}
+            />
+          </div>
+        </div>
+      ) : null}
 
       <input
         ref={inputRef}

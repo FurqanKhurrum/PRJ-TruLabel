@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import ScanHero from "@/components/scan/ScanHero";
 import RecentScans from "@/components/scan/RecentScans";
@@ -9,9 +9,42 @@ import { saveLastScan, saveRecentScan } from "@/lib/storage";
 
 export default function ScanPage() {
   const router = useRouter();
+  const progressTimerRef = useRef(null);
   const [selectedLabel, setSelectedLabel] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    return () => {
+      if (progressTimerRef.current) {
+        clearInterval(progressTimerRef.current);
+        progressTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  const startProgress = () => {
+    if (progressTimerRef.current) {
+      clearInterval(progressTimerRef.current);
+    }
+
+    setProgress(5);
+    progressTimerRef.current = setInterval(() => {
+      setProgress((current) => {
+        if (current >= 90) return current;
+        const bump = current < 40 ? 7 : current < 70 ? 4 : 2;
+        return Math.min(current + bump, 90);
+      });
+    }, 300);
+  };
+
+  const stopProgress = () => {
+    if (progressTimerRef.current) {
+      clearInterval(progressTimerRef.current);
+      progressTimerRef.current = null;
+    }
+  };
 
   const handleFileSelect = async (file) => {
     if (!file || !file.type.startsWith("image/")) {
@@ -22,15 +55,19 @@ export default function ScanPage() {
     setError("");
     setSelectedLabel(file.name);
     setIsLoading(true);
+    startProgress();
 
     try {
       const result = await scanImage(file);
+      setProgress(100);
       saveLastScan(result);
       saveRecentScan(result);
       router.push("/scan-result");
     } catch (err) {
       setError(err?.message ?? "Unable to scan that image, please try again.");
+      setProgress(0);
     } finally {
+      stopProgress();
       setIsLoading(false);
     }
   };
@@ -42,6 +79,7 @@ export default function ScanPage() {
           onFileSelect={handleFileSelect}
           isLoading={isLoading}
           selectedLabel={selectedLabel}
+          progress={progress}
         />
 
         {error ? (

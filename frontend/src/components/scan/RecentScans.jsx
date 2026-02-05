@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { getRecentScans } from "@/lib/storage";
+import { getRecentScans, saveLastScan } from "@/lib/storage";
 
 const gradeStyles = {
   A: "bg-emerald-500 text-white",
@@ -24,10 +24,13 @@ export default function RecentScans() {
   const handleScanClick = (scan) => {
     if (!scan.fullScanResult) return;
 
-    // Save the stored scan result to sessionStorage
-    sessionStorage.setItem('trulabel:lastScan', JSON.stringify(scan.fullScanResult));
+    saveLastScan(scan.fullScanResult);
     // Navigate to scan result page
-    router.push('/scan-result');
+    router.push("/scan-result");
+  };
+
+  const handleViewAll = () => {
+    router.push("/scan-history");
   };
 
   if (scans.length === 0) {
@@ -54,6 +57,7 @@ export default function RecentScans() {
         </h2>
         <button
           type="button"
+          onClick={handleViewAll}
           className="text-sm font-semibold text-emerald-600 transition hover:text-emerald-700"
         >
           View All

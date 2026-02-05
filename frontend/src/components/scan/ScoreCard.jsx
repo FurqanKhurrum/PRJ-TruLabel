@@ -6,14 +6,20 @@ function scoreTone(score) {
 }
 
 export default function ScoreCard({ title, score, description }) {
+  const hasScore = Number.isFinite(score);
+  const scoreLabel = hasScore ? `${score}/100` : "--";
   return (
     <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] p-5 shadow-soft">
       <div className="flex items-center justify-between">
         <div className="text-base font-semibold text-[color:var(--ink)]">
           {title}
         </div>
-        <div className={`text-xl font-bold ${scoreTone(score)}`}>
-          {score}/100
+        <div
+          className={`text-xl font-bold ${
+            hasScore ? scoreTone(score) : "text-slate-400"
+          }`}
+        >
+          {scoreLabel}
         </div>
       </div>
       <p className="mt-3 text-sm leading-relaxed text-[color:var(--muted)]">

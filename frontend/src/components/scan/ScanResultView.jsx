@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
+import ScoreCard from "@/components/scan/ScoreCard";
 import { getLastScan } from "@/lib/storage";
 
 const scoreIcons = {
@@ -103,12 +104,8 @@ const gradeFromScores = (scores) => {
 };
 
 export default function ScanResultView() {
-  const [scanResult, setScanResult] = useState(null);
+  const [scanResult] = useState(() => getLastScan());
   const [activeTab, setActiveTab] = useState("overview");
-
-  useEffect(() => {
-    setScanResult(getLastScan());
-  }, []);
 
   const product = scanResult?.product ?? null;
   const assessment = scanResult?.ethical_assessment?.data ?? null;
@@ -152,12 +149,42 @@ export default function ScanResultView() {
       .slice(0, 6);
   }, [product]);
 
+  const detailScores = useMemo(() => {
+    if (!assessment) return [];
+    return [
+      {
+        id: "sustainability",
+        title: "Sustainability Score",
+        score: assessment.sustainability_score,
+        description:
+          assessment.sustainability_description ||
+          "Sustainability details are not available yet.",
+      },
+      {
+        id: "labor",
+        title: "Labor Practices",
+        score: assessment.labor_practices_score,
+        description:
+          assessment.labor_practices_description ||
+          "Labor practices details are not available yet.",
+      },
+      {
+        id: "testing",
+        title: "Animal Testing Policy",
+        score: assessment.animal_testing_score,
+        description:
+          assessment.animal_testing_description ||
+          "Animal testing details are not available yet.",
+      },
+    ];
+  }, [assessment]);
+
   if (!scanResult || !product) {
     return (
       <main className="min-h-screen bg-[color:var(--canvas)] px-6 py-10">
         <div className="mx-auto flex w-full max-w-md flex-col gap-6">
           <Link
-            href="/"
+            href="/scan"
             className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600"
           >
             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white shadow-sm">
@@ -205,7 +232,7 @@ export default function ScanResultView() {
     <main className="min-h-screen bg-[color:var(--canvas)] px-6 py-10">
       <div className="mx-auto flex w-full max-w-md flex-col gap-6">
         <Link
-          href="/"
+          href="/scan"
           className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600"
         >
           <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white shadow-sm">
@@ -366,100 +393,126 @@ export default function ScanResultView() {
         ) : null}
 
         {activeTab === "details" ? (
-          <section className="rounded-3xl bg-white p-5 shadow-sm">
-            <div className="grid gap-4 text-sm">
-              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                <p className="text-xs uppercase tracking-wide text-[color:var(--muted)]">
-                  Barcode
-                </p>
-                <p className="mt-2 font-semibold text-[color:var(--ink)]">
-                  {scanResult.barcode || "--"}
-                </p>
+          <div className="space-y-4">
+            {assessment ? (
+              <div className="space-y-4">
+                {detailScores.map((item) => (
+                  <ScoreCard
+                    key={item.id}
+                    title={item.title}
+                    score={item.score}
+                    description={item.description}
+                  />
+                ))}
               </div>
+            ) : (
+              <section className="rounded-3xl bg-white p-5 text-sm text-[color:var(--muted)] shadow-sm">
+                Scores and descriptions are not available for this product yet.
+              </section>
+            )}
 
-              {/* Product Type Specific Fields - NEW! */}
-              {productType === "electronics" && (
-                <>
-                  {product.model && (
-                    <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                      <p className="text-xs uppercase tracking-wide text-[color:var(--muted)]">
-                        Model
-                      </p>
-                      <p className="mt-2 font-semibold text-[color:var(--ink)]">
-                        {product.model}
-                      </p>
-                    </div>
-                  )}
-                  {product.mpn && (
-                    <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                      <p className="text-xs uppercase tracking-wide text-[color:var(--muted)]">
-                        MPN
-                      </p>
-                      <p className="mt-2 font-semibold text-[color:var(--ink)]">
-                        {product.mpn}
-                      </p>
-                    </div>
-                  )}
-                </>
-              )}
-
-              {productType === "book" && product.isbn && (
+            <section className="rounded-3xl bg-white p-5 shadow-sm">
+              <div className="grid gap-4 text-sm">
                 <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
                   <p className="text-xs uppercase tracking-wide text-[color:var(--muted)]">
-                    ISBN
+                    Barcode
                   </p>
                   <p className="mt-2 font-semibold text-[color:var(--ink)]">
-                    {product.isbn}
+                    {scanResult.barcode || "--"}
                   </p>
                 </div>
-              )}
 
-              {product.category && product.category !== "--" && (
-                <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                  <p className="text-xs uppercase tracking-wide text-[color:var(--muted)]">
-                    Category
-                  </p>
-                  <p className="mt-2 font-semibold text-[color:var(--ink)]">
-                    {Array.isArray(product.category) ? product.category.join('') : product.category}
-                  </p>
-                </div>
-              )}
+                {/* Product Type Specific Fields - NEW! */}
+                {productType === "electronics" && (
+                  <>
+                    {product.model && (
+                      <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                        <p className="text-xs uppercase tracking-wide text-[color:var(--muted)]">
+                          Model
+                        </p>
+                        <p className="mt-2 font-semibold text-[color:var(--ink)]">
+                          {product.model}
+                        </p>
+                      </div>
+                    )}
+                    {product.mpn && (
+                      <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                        <p className="text-xs uppercase tracking-wide text-[color:var(--muted)]">
+                          MPN
+                        </p>
+                        <p className="mt-2 font-semibold text-[color:var(--ink)]">
+                          {product.mpn}
+                        </p>
+                      </div>
+                    )}
+                  </>
+                )}
 
-              {product.description && (
-                <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                  <p className="text-xs uppercase tracking-wide text-[color:var(--muted)]">
-                    Description
-                  </p>
-                  <p className="mt-2 text-sm leading-relaxed text-[color:var(--ink)]">
-                    {Array.isArray(product.description) ? product.description.join('') : product.description}
-                  </p>
-                </div>
-              )}
+                {productType === "book" && product.isbn && (
+                  <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                    <p className="text-xs uppercase tracking-wide text-[color:var(--muted)]">
+                      ISBN
+                    </p>
+                    <p className="mt-2 font-semibold text-[color:var(--ink)]">
+                      {product.isbn}
+                    </p>
+                  </div>
+                )}
 
-              {product.country_of_origin && product.country_of_origin !== "--" && (
-                <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                  <p className="text-xs uppercase tracking-wide text-[color:var(--muted)]">
-                    Origin
-                  </p>
-                  <p className="mt-2 font-semibold text-[color:var(--ink)]">
-                    {product.country_of_origin.replace(/^en:|^fr:|^es:/, '').trim()}
-                  </p>
-                </div>
-              )}
+                {product.category && product.category !== "--" && (
+                  <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                    <p className="text-xs uppercase tracking-wide text-[color:var(--muted)]">
+                      Category
+                    </p>
+                    <p className="mt-2 font-semibold text-[color:var(--ink)]">
+                      {Array.isArray(product.category)
+                        ? product.category.join("")
+                        : product.category}
+                    </p>
+                  </div>
+                )}
 
-              {/* Show Eco Score only for food/cosmetics */}
-              {(productType === "food" || productType === "cosmetics") && (
-                <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                  <p className="text-xs uppercase tracking-wide text-[color:var(--muted)]">
-                    Eco Score
-                  </p>
-                  <p className="mt-2 font-semibold text-[color:var(--ink)]">
-                    {product.ecoscore ? `${product.ecoscore}/100` : "--"}
-                  </p>
-                </div>
-              )}
-            </div>
-          </section>
+                {product.description && (
+                  <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                    <p className="text-xs uppercase tracking-wide text-[color:var(--muted)]">
+                      Description
+                    </p>
+                    <p className="mt-2 text-sm leading-relaxed text-[color:var(--ink)]">
+                      {Array.isArray(product.description)
+                        ? product.description.join("")
+                        : product.description}
+                    </p>
+                  </div>
+                )}
+
+                {product.country_of_origin &&
+                product.country_of_origin !== "--" ? (
+                  <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                    <p className="text-xs uppercase tracking-wide text-[color:var(--muted)]">
+                      Origin
+                    </p>
+                    <p className="mt-2 font-semibold text-[color:var(--ink)]">
+                      {product.country_of_origin
+                        .replace(/^en:|^fr:|^es:/, "")
+                        .trim()}
+                    </p>
+                  </div>
+                ) : null}
+
+                {/* Show Eco Score only for food/cosmetics */}
+                {(productType === "food" || productType === "cosmetics") && (
+                  <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                    <p className="text-xs uppercase tracking-wide text-[color:var(--muted)]">
+                      Eco Score
+                    </p>
+                    <p className="mt-2 font-semibold text-[color:var(--ink)]">
+                      {product.ecoscore ? `${product.ecoscore}/100` : "--"}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </section>
+          </div>
         ) : null}
 
         {activeTab === "sources" ? (
