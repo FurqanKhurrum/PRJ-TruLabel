@@ -1,8 +1,10 @@
 const LAST_SCAN_KEY = "trulabel:lastScan";
 const RECENT_SCANS_KEY = "trulabel:recentScans";
+const RECENT_SCANS_EVENT = "trulabel:recentScans";
 const MAX_RECENT = 8;
 
 const isBrowser = () => typeof window !== "undefined";
+let recentScansCache = null;
 
 const safeParse = (value, fallback) => {
   if (!value) return fallback;
@@ -69,15 +71,43 @@ export const clearLastScan = () => {
   sessionStorage.removeItem(LAST_SCAN_KEY);
 };
 
+const notifyRecentScans = () => {
+  if (!isBrowser()) return;
+  window.dispatchEvent(new Event(RECENT_SCANS_EVENT));
+};
+
 export const getRecentScans = () => {
   if (!isBrowser()) return [];
-  return safeParse(localStorage.getItem(RECENT_SCANS_KEY), []);
+  if (recentScansCache !== null) return recentScansCache;
+  recentScansCache = safeParse(localStorage.getItem(RECENT_SCANS_KEY), []);
+  return recentScansCache;
+};
+
+export const subscribeRecentScans = (callback) => {
+  if (!isBrowser()) return () => {};
+
+  const handleChange = (event) => {
+    if (event?.type === "storage" && event.key && event.key !== RECENT_SCANS_KEY)
+      return;
+    recentScansCache = null;
+    callback();
+  };
+
+  window.addEventListener("storage", handleChange);
+  window.addEventListener(RECENT_SCANS_EVENT, handleChange);
+
+  return () => {
+    window.removeEventListener("storage", handleChange);
+    window.removeEventListener(RECENT_SCANS_EVENT, handleChange);
+  };
 };
 
 export const clearRecentScans = () => {
   if (!isBrowser()) return [];
   localStorage.removeItem(RECENT_SCANS_KEY);
-  return [];
+  recentScansCache = [];
+  notifyRecentScans();
+  return recentScansCache;
 };
 
 export const saveRecentScan = (scanResult) => {
@@ -87,6 +117,8 @@ export const saveRecentScan = (scanResult) => {
   const updated = [entry, ...existing].slice(0, MAX_RECENT);
 
   localStorage.setItem(RECENT_SCANS_KEY, JSON.stringify(updated));
+  recentScansCache = updated;
+  notifyRecentScans();
   return updated;
 };
 

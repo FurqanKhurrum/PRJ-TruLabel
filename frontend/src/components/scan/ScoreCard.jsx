@@ -16,7 +16,7 @@ export default function ScoreCard({ title, score, description }) {
         </div>
         <div
           className={`text-xl font-bold ${
-            hasScore ? scoreTone(score) : "text-slate-400"
+            hasScore ? scoreTone(score) : "text-[color:var(--muted)]"
           }`}
         >
           {scoreLabel}
