@@ -30,6 +30,32 @@ export async function scanImage(file) {
 }
 
 /**
+ * Extract barcode only from image (fast path, no AI)
+ */
+export async function extractBarcode(file) {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await fetch(`${API_BASE}/api/barcode/extract`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!response.ok) {
+    let message = "Barcode extraction failed.";
+    try {
+      const error = await response.json();
+      message = error?.detail || error?.error || message;
+    } catch (err) {
+      // ignore JSON parse failures
+    }
+    throw new Error(message);
+  }
+
+  return response.json();
+}
+
+/**
  * Get product by barcode directly
  */
 export async function getProduct(barcode) {

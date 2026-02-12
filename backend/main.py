@@ -106,6 +106,7 @@ barcode_service = BarcodeService()
 MAX_RETRIES = 3
 RETRY_DELAY = 1
 AI_TIMEOUT = 30
+ETHICAL_ASSESSMENT_CACHE_KEY = "_trulabel_ethical_assessment"
 
 # Enhanced AI prompt for different product types
 ETHICAL_ASSESSMENT_PROMPT = """You are an ethical product assessment AI. Analyze this product and return ONLY a JSON object.
@@ -310,6 +311,37 @@ def parse_ai_json_response(text: str) -> Optional[Dict]:
         return None
 
 
+def get_cached_ethical_assessment(product: Product) -> Optional[Dict[str, Any]]:
+    """Read previously saved ethical assessment from product raw data."""
+    raw_api_data = product.raw_api_data
+    if not isinstance(raw_api_data, dict):
+        return None
+
+    cached_assessment = raw_api_data.get(ETHICAL_ASSESSMENT_CACHE_KEY)
+    if not isinstance(cached_assessment, dict):
+        return None
+
+    return cached_assessment
+
+
+def save_cached_ethical_assessment(
+    db: Session,
+    product: Product,
+    ethical_assessment: Optional[Dict[str, Any]],
+) -> None:
+    """Persist ethical assessment in product raw data for fast repeat scans."""
+    if not isinstance(ethical_assessment, dict):
+        return
+
+    current_raw_data = product.raw_api_data if isinstance(product.raw_api_data, dict) else {}
+    updated_raw_data = dict(current_raw_data)
+    updated_raw_data[ETHICAL_ASSESSMENT_CACHE_KEY] = ethical_assessment
+
+    product.raw_api_data = updated_raw_data
+    db.commit()
+    db.refresh(product)
+
+
 @app.post("/api/scan")
 async def scan_product(file: UploadFile = File(...), db: Session = Depends(get_db)):
     """
@@ -364,18 +396,23 @@ async def scan_product(file: UploadFile = File(...), db: Session = Depends(get_d
         
         product_dict = cached_product.to_dict()
         product_dict['cache_hit'] = True
-        
-        # AI assessment
-        ethical_result = await assess_product_ethics(
-            product_name=product_dict.get("product_name", "Unknown"),
-            brand_name=product_dict.get("brand_name", "Unknown"),
-            product_type=product_dict.get("product_type", "general"),
-            category=product_dict.get("category", ""),
-            description=product_dict.get("description", ""),
-            labels=product_dict.get("labels", ""),
-            product_url=product_dict.get("link", "")
-        )
-        
+
+        ethical_result = get_cached_ethical_assessment(cached_product)
+        if ethical_result:
+            print("⚡ Ethical assessment cache hit")
+        else:
+            print("🤖 No cached ethical assessment, generating once...")
+            ethical_result = await assess_product_ethics(
+                product_name=product_dict.get("product_name", "Unknown"),
+                brand_name=product_dict.get("brand_name", "Unknown"),
+                product_type=product_dict.get("product_type", "general"),
+                category=product_dict.get("category", ""),
+                description=product_dict.get("description", ""),
+                labels=product_dict.get("labels", ""),
+                product_url=product_dict.get("link", "")
+            )
+            save_cached_ethical_assessment(db, cached_product, ethical_result)
+
         print("="*70 + "\n")
         return {
             "barcode": barcode,
@@ -428,6 +465,7 @@ async def scan_product(file: UploadFile = File(...), db: Session = Depends(get_d
         labels=result_dict.get("labels", ""),
         product_url=result_dict.get("link", "")
     )
+    save_cached_ethical_assessment(db, saved_product, ethical_result)
     
     print("✓ Scan complete!")
     print("="*70 + "\n")
@@ -437,6 +475,27 @@ async def scan_product(file: UploadFile = File(...), db: Session = Depends(get_d
         "product": result_dict,
         "ethical_assessment": ethical_result
     }
+
+
+@app.post("/api/barcode/extract")
+async def extract_barcode(file: UploadFile = File(...)):
+    """Extract barcode only (no API lookup, no AI assessment)."""
+    if not file.content_type.startswith('image/'):
+        raise HTTPException(
+            status_code=400,
+            detail="File must be an image (jpeg, png, etc.)"
+        )
+
+    image_bytes = await file.read()
+    barcode = barcode_service.extract_barcode_from_image(image_bytes)
+
+    if not barcode:
+        raise HTTPException(
+            status_code=404,
+            detail="No barcode detected in image. Please ensure barcode is clearly visible."
+        )
+
+    return {"barcode": barcode}
 
 
 @app.get("/api/product/{barcode}")
