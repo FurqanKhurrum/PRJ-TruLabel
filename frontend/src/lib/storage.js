@@ -3,6 +3,10 @@ const RECENT_SCANS_KEY = "trulabel:recentScans";
 const MAX_RECENT = 8;
 
 const isBrowser = () => typeof window !== "undefined";
+const normalizeBarcode = (barcode) => {
+  if (barcode === undefined || barcode === null) return "";
+  return String(barcode).trim();
+};
 
 const safeParse = (value, fallback) => {
   if (!value) return fallback;
@@ -20,7 +24,7 @@ const getGrade = (scores) => {
   const average =
     valid.reduce((total, score) => total + score, 0) / valid.length;
 
- if (average >= 80) return "A";
+  if (average >= 80) return "A";
   if (average >= 70) return "B";
   if (average >= 60) return "C";
   if (average >= 50) return "D";
@@ -74,6 +78,19 @@ export const getRecentScans = () => {
   return safeParse(localStorage.getItem(RECENT_SCANS_KEY), []);
 };
 
+export const getRecentScanByBarcode = (barcode) => {
+  if (!isBrowser()) return null;
+  const targetBarcode = normalizeBarcode(barcode);
+  if (!targetBarcode) return null;
+
+  return (
+    getRecentScans().find(
+      (scan) =>
+        normalizeBarcode(scan?.barcode) === targetBarcode && scan?.fullScanResult,
+    ) ?? null
+  );
+};
+
 export const clearRecentScans = () => {
   if (!isBrowser()) return [];
   localStorage.removeItem(RECENT_SCANS_KEY);
@@ -84,7 +101,13 @@ export const saveRecentScan = (scanResult) => {
   if (!isBrowser()) return [];
   const entry = buildRecentScanEntry(scanResult);
   const existing = getRecentScans();
-  const updated = [entry, ...existing].slice(0, MAX_RECENT);
+  const entryBarcode = normalizeBarcode(entry.barcode);
+  const deduped = entryBarcode
+    ? existing.filter(
+        (scan) => normalizeBarcode(scan?.barcode) !== entryBarcode,
+      )
+    : existing;
+  const updated = [entry, ...deduped].slice(0, MAX_RECENT);
 
   localStorage.setItem(RECENT_SCANS_KEY, JSON.stringify(updated));
   return updated;
