@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   clearScanHistory,
   getRecentScans,
   saveLastScan,
+  subscribeRecentScans,
 } from "@/lib/storage";
+import BottomNav from "@/components/ui/BottomNav";
 
 const gradeStyles = {
   A: "bg-emerald-500 text-white",
@@ -16,14 +18,15 @@ const gradeStyles = {
   D: "bg-orange-500 text-white",
   F: "bg-rose-500 text-white",
 };
+const EMPTY_SCANS = [];
 
 export default function ScanHistoryPage() {
-  const [scans, setScans] = useState([]);
   const router = useRouter();
-
-  useEffect(() => {
-    setScans(getRecentScans());
-  }, []);
+  const scans = useSyncExternalStore(
+    subscribeRecentScans,
+    getRecentScans,
+    () => EMPTY_SCANS
+  );
 
   const handleScanClick = (scan) => {
     if (!scan.fullScanResult) return;
@@ -33,17 +36,16 @@ export default function ScanHistoryPage() {
 
   const handleClearHistory = () => {
     clearScanHistory();
-    setScans([]);
   };
 
   return (
-    <main className="min-h-screen bg-[color:var(--canvas)] px-6 py-10">
+    <main className="min-h-screen bg-[color:var(--canvas)] px-6 py-10 pb-28">
       <div className="mx-auto flex w-full max-w-md flex-col gap-6">
         <Link
           href="/scan"
-          className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600"
+          className="inline-flex items-center gap-2 text-sm font-semibold text-[color:var(--muted)]"
         >
-          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white shadow-sm">
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[color:var(--card)] shadow-sm">
             <svg
               width="16"
               height="16"
@@ -60,7 +62,7 @@ export default function ScanHistoryPage() {
           Back
         </Link>
 
-        <section className="rounded-3xl bg-white p-5 shadow-sm">
+        <section className="rounded-3xl bg-[color:var(--card)] p-5 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-base font-semibold text-[color:var(--ink)]">
@@ -76,7 +78,7 @@ export default function ScanHistoryPage() {
         </section>
 
         {scans.length === 0 ? (
-          <section className="rounded-2xl border border-dashed border-slate-200 bg-white/60 px-4 py-8 text-center text-sm text-[color:var(--muted)]">
+          <section className="rounded-2xl border border-dashed border-[color:var(--border)] bg-[color:var(--card-soft)] px-4 py-8 text-center text-sm text-[color:var(--muted)]">
             Scan a product to build your history.
           </section>
         ) : (
@@ -86,7 +88,7 @@ export default function ScanHistoryPage() {
                 <article
                   key={scan.id}
                   onClick={() => handleScanClick(scan)}
-                  className="flex items-center gap-4 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm transition hover:border-emerald-100 hover:shadow-md cursor-pointer"
+                  className="flex items-center gap-4 rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] p-4 shadow-sm transition hover:border-emerald-100 hover:shadow-md cursor-pointer"
                 >
                   {scan.image ? (
                     <img
@@ -113,7 +115,8 @@ export default function ScanHistoryPage() {
                   </div>
                   <span
                     className={`flex h-9 w-9 items-center justify-center rounded-full text-sm font-semibold ${
-                      gradeStyles[scan.grade] ?? "bg-slate-200 text-slate-700"
+                      gradeStyles[scan.grade] ??
+                      "bg-[color:var(--card-muted)] text-[color:var(--muted)]"
                     }`}
                   >
                     {scan.grade}
@@ -148,6 +151,7 @@ export default function ScanHistoryPage() {
           </>
         )}
       </div>
+      <BottomNav />
     </main>
   );
 }

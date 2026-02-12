@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
-import { getRecentScans, saveLastScan } from "@/lib/storage";
+import { getRecentScans, saveLastScan, subscribeRecentScans } from "@/lib/storage";
 
 const gradeStyles = {
   A: "bg-emerald-500 text-white",
@@ -11,15 +11,15 @@ const gradeStyles = {
   D: "bg-orange-500 text-white",
   F: "bg-rose-500 text-white",
 };
+const EMPTY_SCANS = [];
 
 export default function RecentScans() {
-  const [scans, setScans] = useState([]);
   const router = useRouter();
-
-  useEffect(() => {
-    // Load scans only on client side after mount
-    setScans(getRecentScans());
-  }, []);
+  const scans = useSyncExternalStore(
+    subscribeRecentScans,
+    getRecentScans,
+    () => EMPTY_SCANS
+  );
 
   const handleScanClick = (scan) => {
     if (!scan.fullScanResult) return;
@@ -42,7 +42,7 @@ export default function RecentScans() {
           </h2>
         </div>
 
-        <div className="rounded-2xl border border-dashed border-slate-200 bg-white/60 px-4 py-6 text-center text-sm text-[color:var(--muted)]">
+        <div className="rounded-2xl border border-dashed border-[color:var(--border)] bg-[color:var(--card-soft)] px-4 py-6 text-center text-sm text-[color:var(--muted)]">
           No scans yet. Scan a product to see it here.
         </div>
       </section>
@@ -69,7 +69,7 @@ export default function RecentScans() {
           <article
             key={scan.id}
             onClick={() => handleScanClick(scan)}
-            className="flex items-center gap-4 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm cursor-pointer transition hover:shadow-md hover:border-emerald-100"
+            className="flex items-center gap-4 rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] p-4 shadow-sm cursor-pointer transition hover:shadow-md hover:border-emerald-100"
           >
             {scan.image ? (
               <img
@@ -96,7 +96,8 @@ export default function RecentScans() {
             </div>
             <span
               className={`flex h-9 w-9 items-center justify-center rounded-full text-sm font-semibold ${
-                gradeStyles[scan.grade] ?? "bg-slate-200 text-slate-700"
+                gradeStyles[scan.grade] ??
+                "bg-[color:var(--card-muted)] text-[color:var(--muted)]"
               }`}
             >
               {scan.grade}

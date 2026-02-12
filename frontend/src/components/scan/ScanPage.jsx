@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import ScanHero from "@/components/scan/ScanHero";
 import RecentScans from "@/components/scan/RecentScans";
+import HomeSearchCard from "@/components/home/HomeSearchCard";
+import BottomNav from "@/components/ui/BottomNav";
 import { extractBarcode, scanImage } from "@/lib/api";
 import {
   getRecentScans,
@@ -140,8 +142,10 @@ export default function ScanPage() {
   };
 
   return (
-    <main className="min-h-screen bg-[color:var(--canvas)] px-6 py-10">
+    <main className="min-h-screen bg-[color:var(--canvas)] px-6 py-10 pb-28">
       <div className="mx-auto flex w-full max-w-md flex-col gap-6">
+        <HomeSearchCard />
+
         <ScanHero
           onFileSelect={handleFileSelect}
           isLoading={isLoading}
@@ -157,6 +161,7 @@ export default function ScanPage() {
 
         <RecentScans />
       </div>
+      <BottomNav />
     </main>
   );
 }

@@ -1,5 +1,6 @@
 import { Space_Grotesk, Fraunces } from "next/font/google";
 import "./globals.css";
+import ThemeProvider from "@/components/ui/ThemeProvider";
 
 const spaceGrotesk = Space_Grotesk({
   variable: "--font-sans",
@@ -22,6 +23,7 @@ export default function RootLayout({ children }) {
       <body
         className={`${spaceGrotesk.variable} ${fraunces.variable} antialiased`}
       >
+        <ThemeProvider />
         {children}
       </body>
     </html>
