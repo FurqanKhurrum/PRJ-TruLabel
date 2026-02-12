@@ -6,8 +6,50 @@ import ScanHero from "@/components/scan/ScanHero";
 import RecentScans from "@/components/scan/RecentScans";
 import HomeSearchCard from "@/components/home/HomeSearchCard";
 import BottomNav from "@/components/ui/BottomNav";
-import { scanImage } from "@/lib/api";
-import { saveLastScan, saveRecentScan } from "@/lib/storage";
+import { extractBarcode, scanImage } from "@/lib/api";
+import {
+  getRecentScans,
+  getRecentScanByBarcode,
+  saveLastScan,
+  saveRecentScan,
+} from "@/lib/storage";
+
+const BARCODE_FORMATS = [
+  "ean_13",
+  "ean_8",
+  "upc_a",
+  "upc_e",
+  "code_128",
+  "code_39",
+  "itf",
+  "qr_code",
+];
+
+const detectBarcodeFromFile = async (file) => {
+  if (typeof window === "undefined") return null;
+
+  const BarcodeDetectorClass = window.BarcodeDetector;
+  if (!BarcodeDetectorClass || typeof BarcodeDetectorClass !== "function") {
+    return null;
+  }
+
+  let imageBitmap = null;
+
+  try {
+    const detector = new BarcodeDetectorClass({ formats: BARCODE_FORMATS });
+    imageBitmap = await createImageBitmap(file);
+    const detected = await detector.detect(imageBitmap);
+    const matchedBarcode = detected?.find((item) => item?.rawValue)?.rawValue;
+
+    return matchedBarcode ? String(matchedBarcode).trim() : null;
+  } catch {
+    return null;
+  } finally {
+    if (imageBitmap && typeof imageBitmap.close === "function") {
+      imageBitmap.close();
+    }
+  }
+};
 
 export default function ScanPage() {
   const router = useRouter();
@@ -60,6 +102,31 @@ export default function ScanPage() {
     startProgress();
 
     try {
+      let detectedBarcode = await detectBarcodeFromFile(file);
+
+      if (!detectedBarcode && getRecentScans().length > 0) {
+        try {
+          const extracted = await extractBarcode(file);
+          detectedBarcode = extracted?.barcode
+            ? String(extracted.barcode).trim()
+            : null;
+        } catch {
+          detectedBarcode = null;
+        }
+      }
+
+      const existingScan = detectedBarcode
+        ? getRecentScanByBarcode(detectedBarcode)
+        : null;
+
+      if (existingScan?.fullScanResult) {
+        setProgress(100);
+        saveLastScan(existingScan.fullScanResult);
+        saveRecentScan(existingScan.fullScanResult);
+        router.push("/scan-result");
+        return;
+      }
+
       const result = await scanImage(file);
       setProgress(100);
       saveLastScan(result);
