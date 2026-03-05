@@ -1,6 +1,7 @@
 import { Space_Grotesk, Fraunces } from "next/font/google";
 import "./globals.css";
 import ThemeProvider from "@/components/ui/ThemeProvider";
+import { AuthProvider } from "@/context/AuthContext"
 
 const spaceGrotesk = Space_Grotesk({
   variable: "--font-sans",
@@ -24,7 +25,7 @@ export default function RootLayout({ children }) {
         className={`${spaceGrotesk.variable} ${fraunces.variable} antialiased`}
       >
         <ThemeProvider />
-        {children}
+        <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
   );
