@@ -1,7 +1,17 @@
 """
 TruLabel API Services
-Multi-layer API integration for comprehensive product coverage
-Supports: Food, Electronics, Books, Cosmetics, General Retail Products
+Multi-layer API integration for comprehensive product coverage.
+
+Data sources (all free, no API key required unless noted):
+  - OpenFoodFacts       : Food and beverage products
+  - OpenBeautyFacts     : Cosmetics and personal care products
+  - OpenProductsFacts   : General household, retail, and pet products
+  - UPCItemDB           : Broad product coverage (free tier, rate-limited)
+  - BarcodeLookupService: Wide retail coverage (requires paid API key)
+
+The ProductAPIAggregator tries each source in order and returns the first
+successful result. If no source finds the product, the caller receives None
+and should return a graceful "not found" response rather than a hard error.
 """
 
 import httpx
@@ -120,10 +130,16 @@ class UPCItemDBService(ProductAPIService):
                     params={"upc": barcode},
                     timeout=10.0
                 )
+
+                # Free tier returns 429 when daily limit is exceeded — skip gracefully
+                if response.status_code == 429:
+                    logger.warning("UPCItemDB rate limit reached, skipping")
+                    return None
+
                 response.raise_for_status()
-                
+
                 data = response.json()
-                
+
                 if data.get("code") == "OK" and data.get("items"):
                     item = data["items"][0]
                     
@@ -248,6 +264,66 @@ class BarcodeLookupService(ProductAPIService):
             return None
 
 
+class OpenProductsFactsService(ProductAPIService):
+    """
+    Open Products Facts API - General non-food, non-cosmetic products.
+    Covers household items, office supplies, pet products, and more.
+    Same API structure as Open Food Facts, maintained by the same foundation.
+    """
+
+    @property
+    def service_name(self) -> str:
+        return "OpenProductsFacts"
+
+    @property
+    def product_types(self) -> List[str]:
+        return ["household", "general", "pet", "office", "retail"]
+
+    async def fetch_product(self, barcode: str) -> Optional[Dict[str, Any]]:
+        """Fetch from Open Products Facts API"""
+        url = f"https://world.openproductsfacts.org/api/v0/product/{barcode}.json"
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, timeout=10.0)
+                response.raise_for_status()
+
+                data = response.json()
+
+                if data.get("status") == 1:
+                    product = data.get("product", {})
+
+                    return {
+                        "source": self.service_name,
+                        "product_type": "general",
+                        "product_name": product.get("product_name", "Unknown"),
+                        "brand_name": product.get("brands", "Unknown"),
+                        "brand_owner": product.get("brand_owner", ""),
+                        "quantity": product.get("quantity", ""),
+                        "image_url": product.get("image_url", ""),
+                        "image_front_url": product.get("image_front_url", ""),
+                        "category": product.get("categories", ""),
+                        "ingredients": product.get("ingredients_text", ""),
+                        "labels": product.get("labels", ""),
+                        "packaging": product.get("packaging", ""),
+                        "packaging_text": product.get("packaging_text", ""),
+                        "country_of_origin": product.get("countries", ""),
+                        "origins": product.get("origins", ""),
+                        "manufacturing_places": product.get("manufacturing_places", ""),
+                        "stores": product.get("stores", ""),
+                        "completeness": product.get("completeness", 0),
+                        "link": f"https://world.openproductsfacts.org/product/{barcode}",
+                        "raw_api_data": product
+                    }
+                else:
+                    logger.info(f"Product {barcode} not found in OpenProductsFacts")
+                    return None
+
+        except Exception as e:
+            logger.error(f"OpenProductsFacts error: {e}")
+            return None
+
+
 class OpenBeautyFactsService(ProductAPIService):
     """Open Beauty Facts API - Cosmetics and personal care products"""
     
@@ -308,11 +384,19 @@ class ProductAPIAggregator:
     """
     
     def __init__(self, barcode_lookup_api_key: str = None):
-        # Initialize all services - using only open databases
+        # Services are tried in order — most specific first, general fallbacks last.
+        # All services listed here are free and require no API key.
         self.services: List[ProductAPIService] = [
-            OpenFoodFactsService(),           # Food and beverage products
-            OpenBeautyFactsService(),          # Cosmetics and beauty products
+            OpenFoodFactsService(),       # Food and beverage products (largest DB)
+            OpenBeautyFactsService(),     # Cosmetics and personal care products
+            OpenProductsFactsService(),   # General/household/retail products
+            UPCItemDBService(),           # Broad coverage; free tier is rate-limited (skips on 429)
         ]
+
+        # Add paid BarcodeLookup service only if an API key was provided
+        if barcode_lookup_api_key:
+            self.services.append(BarcodeLookupService(api_key=barcode_lookup_api_key))
+            logger.info("BarcodeLookup service enabled with API key")
 
         logger.info(f"Initialized {len(self.services)} product API services")
     

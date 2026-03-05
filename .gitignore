@@ -137,3 +137,6 @@ logs/
 
 # Documentation builds
 docs/_build/
+
+# Project planning docs (kept locally, not tracked in repo)
+docs/

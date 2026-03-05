@@ -352,23 +352,32 @@ async def scan_product(file: UploadFile = File(...), db: Session = Depends(get_d
     print("📸 NEW SCAN REQUEST")
     print("="*70)
     
-    if not file.content_type.startswith('image/'):
+    # Validate that the uploaded file is an image
+    if not file.content_type or not file.content_type.startswith('image/'):
         raise HTTPException(
             status_code=400,
-            detail="File must be an image (jpeg, png, etc.)"
+            detail="Uploaded file must be an image (JPEG, PNG, etc.)."
         )
-    
+
     image_bytes = await file.read()
+
+    # Reject suspiciously small files that are unlikely to contain a real barcode
+    if len(image_bytes) < 1000:
+        raise HTTPException(
+            status_code=400,
+            detail="Image file is too small. Please upload a clear photo of the barcode."
+        )
+
     print(f"📷 Image uploaded: {len(image_bytes)} bytes")
-    
-    # Extract barcode
+
+    # Extract barcode from image
     print("🔍 Extracting barcode...")
     barcode = barcode_service.extract_barcode_from_image(image_bytes)
-    
+
     if not barcode:
         raise HTTPException(
-            status_code=404,
-            detail="No barcode detected in image. Please ensure barcode is clearly visible."
+            status_code=422,
+            detail="No barcode detected. Make sure the barcode is clearly visible, well-lit, and not blurry."
         )
     
     print(f"✓ Barcode extracted: {barcode}")
@@ -416,20 +425,29 @@ async def scan_product(file: UploadFile = File(...), db: Session = Depends(get_d
         print("="*70 + "\n")
         return {
             "barcode": barcode,
+            "found": True,
             "product": product_dict,
             "ethical_assessment": ethical_result
         }
-    
+
     # Fetch from APIs
     print(f"❌ Cache miss - fetching from API sources...")
     product_info = await api_aggregator.fetch_product(barcode, preferred_type=barcode_type_hint)
     
     if not product_info:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Product {barcode} not found in any database. Barcode may be invalid or not in our sources."
-        )
-    
+        # Product not found in any source — return a partial response instead of
+        # crashing with a 404. The frontend can display a "not found" state and
+        # the barcode_type hint lets it show the user what kind of product it might be.
+        logger.warning(f"Product {barcode} not found in any API source")
+        return {
+            "barcode": barcode,
+            "found": False,
+            "barcode_type": barcode_type_hint,
+            "message": "Product not found in any of our databases. It may be a regional product or not yet catalogued.",
+            "product": None,
+            "ethical_assessment": None
+        }
+
     print(f"✓ Product found: {product_info.get('product_name')}")
     print(f"  Source: {product_info.get('source')}")
     print(f"  Type: {product_info.get('product_type')}")
@@ -469,9 +487,10 @@ async def scan_product(file: UploadFile = File(...), db: Session = Depends(get_d
     
     print("✓ Scan complete!")
     print("="*70 + "\n")
-    
+
     return {
         "barcode": barcode,
+        "found": True,
         "product": result_dict,
         "ethical_assessment": ethical_result
     }
@@ -480,10 +499,10 @@ async def scan_product(file: UploadFile = File(...), db: Session = Depends(get_d
 @app.post("/api/barcode/extract")
 async def extract_barcode(file: UploadFile = File(...)):
     """Extract barcode only (no API lookup, no AI assessment)."""
-    if not file.content_type.startswith('image/'):
+    if not file.content_type or not file.content_type.startswith('image/'):
         raise HTTPException(
             status_code=400,
-            detail="File must be an image (jpeg, png, etc.)"
+            detail="Uploaded file must be an image (JPEG, PNG, etc.)."
         )
 
     image_bytes = await file.read()
@@ -491,8 +510,8 @@ async def extract_barcode(file: UploadFile = File(...)):
 
     if not barcode:
         raise HTTPException(
-            status_code=404,
-            detail="No barcode detected in image. Please ensure barcode is clearly visible."
+            status_code=422,
+            detail="No barcode detected. Make sure the barcode is clearly visible, well-lit, and not blurry."
         )
 
     return {"barcode": barcode}
@@ -529,10 +548,14 @@ async def get_product(barcode: str, db: Session = Depends(get_db)):
     product_info = await api_aggregator.fetch_product(barcode, preferred_type=barcode_type_hint)
     
     if not product_info:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Product {barcode} not found"
-        )
+        # Partial response — barcode was valid but product is not in any database
+        return {
+            "barcode": barcode,
+            "found": False,
+            "barcode_type": barcode_type_hint,
+            "message": "Product not found in any of our databases.",
+            "product": None
+        }
 
     # Map 'source' to 'data_source' for database model
     cache_data = {"barcode": barcode, **product_info}
