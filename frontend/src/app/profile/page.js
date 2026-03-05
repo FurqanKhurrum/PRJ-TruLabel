@@ -24,26 +24,25 @@ function getGradeFromScore(score) {
   return "F";
 }
 
-function Avatar({ name, size = "lg" }) {
+function Avatar({ name }) {
   const initials = name
     ? name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()
     : "?";
-  const sz = size === "lg" ? "h-20 w-20 text-2xl" : "h-9 w-9 text-sm";
   return (
-    <span className={`inline-flex items-center justify-center rounded-full bg-emerald-500 font-bold text-white ${sz}`}>
+    <span className="inline-flex h-20 w-20 items-center justify-center rounded-full bg-emerald-500 text-2xl font-bold text-white">
       {initials}
     </span>
   );
 }
 
-function ProductCard({ item, onUnfavorite }) {
+function FavoriteCard({ item, onUnfavorite }) {
   const grade = getGradeFromScore(item.ethical_score);
   return (
     <article className="flex items-center gap-3 rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] p-4 shadow-sm">
       {item.image_url ? (
         <img src={item.image_url} alt="" className="h-12 w-12 rounded-xl object-contain bg-gray-50" />
       ) : (
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-50 text-emerald-400 text-xl">🛒</div>
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-50 text-xl">🛒</div>
       )}
       <div className="flex-1 min-w-0">
         <p className="truncate text-sm font-semibold text-[color:var(--ink)]">
@@ -57,74 +56,39 @@ function ProductCard({ item, onUnfavorite }) {
             {grade}
           </span>
         )}
-        {onUnfavorite && (
-          <button
-            type="button"
-            onClick={() => onUnfavorite(item.barcode)}
-            className="text-rose-400 hover:text-rose-600 transition"
-            title="Remove from favourites"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-            </svg>
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={() => onUnfavorite(item.barcode)}
+          className="text-rose-400 hover:text-rose-600 transition"
+          title="Remove from favourites"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+          </svg>
+        </button>
       </div>
-    </article>
-  );
-}
-
-function HistoryRow({ item }) {
-  const grade = getGradeFromScore(item.ethical_score);
-  const date  = item.scanned_at
-    ? new Date(item.scanned_at).toLocaleDateString("en-CA", { month: "short", day: "numeric" })
-    : "";
-  return (
-    <article className="flex items-center gap-3 rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] p-4 shadow-sm">
-      {item.image_url ? (
-        <img src={item.image_url} alt="" className="h-10 w-10 rounded-xl object-contain bg-gray-50" />
-      ) : (
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-400">🛒</div>
-      )}
-      <div className="flex-1 min-w-0">
-        <p className="truncate text-sm font-semibold text-[color:var(--ink)]">
-          {item.product_name || item.barcode}
-        </p>
-        <p className="text-xs text-[color:var(--muted)]">{date}</p>
-      </div>
-      {grade && (
-        <span className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${gradeStyles[grade]}`}>
-          {grade}
-        </span>
-      )}
     </article>
   );
 }
 
 export default function ProfilePage() {
-  const router             = useRouter();
+  const router = useRouter();
   const { user, token, logout, loading: authLoading } = useAuth();
 
-  const [activeTab,  setActiveTab]  = useState("history"); // "history" | "favorites"
-  const [history,    setHistory]    = useState([]);
-  const [favorites,  setFavorites]  = useState([]);
-  const [dataLoading, setDataLoading] = useState(false);
-  const [error,       setError]      = useState("");
+  const [totalScans,  setTotalScans]  = useState(0);
+  const [favorites,   setFavorites]   = useState([]);
+  const [dataLoading, setDataLoading] = useState(true);
+  const [error,       setError]       = useState("");
 
-  // Redirect to login if not authenticated
   useEffect(() => {
-    if (!authLoading && !user) {
-      router.push("/login");
-    }
+    if (!authLoading && !user) router.push("/login");
   }, [authLoading, user, router]);
 
-  // Load data when user is available
   useEffect(() => {
     if (!user || !token) return;
-    setDataLoading(true);
-    Promise.all([apiGetHistory(token), apiGetFavorites(token)])
+    Promise.all([apiGetHistory(token, 200), apiGetFavorites(token)])
       .then(([histData, favData]) => {
-        setHistory(histData.history  || []);
+        setTotalScans(histData.total ?? 0);
         setFavorites(favData.favorites || []);
       })
       .catch(() => setError("Failed to load your data. Please try again."))
@@ -153,7 +117,7 @@ export default function ProfilePage() {
     );
   }
 
-  if (!user) return null; // redirect in progress
+  if (!user) return null;
 
   return (
     <main className="min-h-screen bg-[color:var(--canvas)] pb-28">
@@ -177,17 +141,16 @@ export default function ProfilePage() {
           </div>
 
           <div className="flex items-center gap-4">
-            <Avatar name={user.display_name} size="lg" />
+            <Avatar name={user.display_name} />
             <div>
               <h1 className="text-xl font-semibold">{user.display_name}</h1>
               <p className="text-sm text-emerald-100">{user.email}</p>
             </div>
           </div>
 
-          {/* Stats row */}
           <div className="grid grid-cols-2 gap-3">
             <div className="rounded-2xl bg-white/15 p-3 text-center">
-              <p className="text-2xl font-bold">{history.length}</p>
+              <p className="text-2xl font-bold">{totalScans}</p>
               <p className="text-xs text-emerald-100">Products scanned</p>
             </div>
             <div className="rounded-2xl bg-white/15 p-3 text-center">
@@ -198,28 +161,9 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="mx-auto max-w-md px-6 py-6 space-y-6">
-
-        <div className="flex gap-2 rounded-2xl bg-[color:var(--card)] p-1.5 shadow-sm">
-          {[
-            { id: "history",   label: "Scan History" },
-            { id: "favorites", label: "Favourites"   },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex-1 rounded-xl py-2 text-sm font-semibold transition ${
-                activeTab === tab.id
-                  ? "bg-emerald-500 text-white shadow-sm"
-                  : "text-[color:var(--muted)] hover:text-[color:var(--ink)]"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+      {/* Favourites list */}
+      <div className="mx-auto max-w-md px-6 py-6 space-y-4">
+        <h2 className="text-base font-semibold text-[color:var(--ink)]">Saved Products</h2>
 
         {error && (
           <div className="rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-600">{error}</div>
@@ -229,30 +173,19 @@ export default function ProfilePage() {
           <div className="flex justify-center py-12">
             <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent" />
           </div>
-        ) : activeTab === "history" ? (
-          <div className="space-y-3">
-            {history.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-[color:var(--border)] bg-[color:var(--card-soft)] px-4 py-8 text-center text-sm text-[color:var(--muted)]">
-                No scans yet. Scan a product to build your history.
-              </div>
-            ) : (
-              history.map((item) => <HistoryRow key={item.id} item={item} />)
-            )}
+        ) : favorites.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-[color:var(--border)] bg-[color:var(--card-soft)] px-4 py-8 text-center text-sm text-[color:var(--muted)]">
+            No saved products yet.
+            <br className="my-1" />
+            Tap the ♡ on any scan result to save it here.
           </div>
         ) : (
           <div className="space-y-3">
-            {favorites.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-[color:var(--border)] bg-[color:var(--card-soft)] px-4 py-8 text-center text-sm text-[color:var(--muted)]">
-                No saved products yet. Tap the heart on any scan result to save it.
-              </div>
-            ) : (
-              favorites.map((item) => (
-                <ProductCard key={item.id} item={item} onUnfavorite={handleUnfavorite} />
-              ))
-            )}
+            {favorites.map((item) => (
+              <FavoriteCard key={item.id} item={item} onUnfavorite={handleUnfavorite} />
+            ))}
           </div>
         )}
-
       </div>
 
       <BottomNav />
