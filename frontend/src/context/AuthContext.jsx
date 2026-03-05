@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { apiLogin, apiRegister, apiGetMe } from "@/lib/auth";
 
-const AuthContext = createContext(null);
+export const AuthContext = createContext(null);
 
 const TOKEN_KEY = "trulabel_token";
 
