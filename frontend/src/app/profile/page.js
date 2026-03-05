@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { apiGetHistory, apiGetFavorites, apiRemoveFavorite } from "@/lib/auth";
+import { getProduct } from "@/lib/api";
+import { getRecentScanByBarcode, saveLastScan } from "@/lib/storage";
 import BottomNav from "@/components/ui/BottomNav";
 
 const gradeStyles = {
@@ -35,10 +37,39 @@ function Avatar({ name }) {
   );
 }
 
-function FavoriteCard({ item, onUnfavorite }) {
+function toSavedScanResult(item, lookupData) {
+  const product = lookupData?.product;
+  return {
+    barcode: item.barcode,
+    ethical_assessment: lookupData?.ethical_assessment,
+    product:
+      product ?? {
+        barcode: item.barcode,
+        product_name: item.product_name || "Unknown product",
+        brand_name: item.brand_name || "Unknown brand",
+        image_url: item.image_url || "",
+        product_type: item.product_type || "general",
+        ethical_score: item.ethical_score ?? null,
+      },
+  };
+}
+
+function FavoriteCard({ item, onOpen, onUnfavorite }) {
   const grade = getGradeFromScore(item.ethical_score);
   return (
-    <article className="flex items-center gap-3 rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] p-4 shadow-sm">
+    <article
+      role="button"
+      tabIndex={0}
+      onClick={() => onOpen(item)}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onOpen(item);
+        }
+      }}
+      className="flex cursor-pointer items-center gap-3 rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] p-4 shadow-sm transition hover:border-emerald-100 hover:shadow-md"
+    >
       {item.image_url ? (
         <img src={item.image_url} alt="" className="h-12 w-12 rounded-xl object-contain bg-gray-50" />
       ) : (
@@ -58,7 +89,10 @@ function FavoriteCard({ item, onUnfavorite }) {
         )}
         <button
           type="button"
-          onClick={() => onUnfavorite(item.barcode)}
+          onClick={(event) => {
+            event.stopPropagation();
+            onUnfavorite(item.barcode);
+          }}
           className="text-rose-400 hover:text-rose-600 transition"
           title="Remove from favourites"
         >
@@ -101,6 +135,29 @@ export default function ProfilePage() {
       setFavorites((prev) => prev.filter((f) => f.barcode !== barcode));
     } catch {
       setError("Failed to remove favourite.");
+    }
+  };
+
+  const handleOpenFavorite = async (item) => {
+    if (!item?.barcode) {
+      setError("Unable to open this product.");
+      return;
+    }
+
+    const recentScan = getRecentScanByBarcode(item.barcode);
+    if (recentScan?.fullScanResult) {
+      saveLastScan(recentScan.fullScanResult);
+      router.push("/scan-result");
+      return;
+    }
+
+    try {
+      const lookup = await getProduct(item.barcode);
+      saveLastScan(toSavedScanResult(item, lookup));
+      router.push("/scan-result");
+    } catch {
+      saveLastScan(toSavedScanResult(item));
+      router.push("/scan-result");
     }
   };
 
@@ -182,7 +239,12 @@ export default function ProfilePage() {
         ) : (
           <div className="space-y-3">
             {favorites.map((item) => (
-              <FavoriteCard key={item.id} item={item} onUnfavorite={handleUnfavorite} />
+              <FavoriteCard
+                key={item.id}
+                item={item}
+                onOpen={handleOpenFavorite}
+                onUnfavorite={handleUnfavorite}
+              />
             ))}
           </div>
         )}

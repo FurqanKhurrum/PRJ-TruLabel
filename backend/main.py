@@ -533,10 +533,26 @@ async def get_product(barcode: str, db: Session = Depends(get_db)):
         
         product_dict = cached_product.to_dict()
         product_dict['cache_hit'] = True
+        ethical_result = get_cached_ethical_assessment(cached_product)
+        if ethical_result:
+            print("Ethical assessment cache hit")
+        else:
+            print("No cached ethical assessment, generating once...")
+            ethical_result = await assess_product_ethics(
+                product_name=product_dict.get("product_name", "Unknown"),
+                brand_name=product_dict.get("brand_name", "Unknown"),
+                product_type=product_dict.get("product_type", "general"),
+                category=product_dict.get("category", ""),
+                description=product_dict.get("description", ""),
+                labels=product_dict.get("labels", ""),
+                product_url=product_dict.get("link", "")
+            )
+            save_cached_ethical_assessment(db, cached_product, ethical_result)
         
         return {
             "barcode": barcode,
-            "product": product_dict
+            "product": product_dict,
+            "ethical_assessment": ethical_result
         }
     
     barcode_type_hint = detect_barcode_type(barcode)
@@ -565,10 +581,26 @@ async def get_product(barcode: str, db: Session = Depends(get_db)):
     
     result_dict = saved_product.to_dict()
     result_dict['cache_hit'] = False
+    ethical_result = get_cached_ethical_assessment(saved_product)
+    if ethical_result:
+        print("Ethical assessment cache hit")
+    else:
+        print("No cached ethical assessment, generating once...")
+        ethical_result = await assess_product_ethics(
+            product_name=result_dict.get("product_name", "Unknown"),
+            brand_name=result_dict.get("brand_name", "Unknown"),
+            product_type=result_dict.get("product_type", "general"),
+            category=result_dict.get("category", ""),
+            description=result_dict.get("description", ""),
+            labels=result_dict.get("labels", ""),
+            product_url=result_dict.get("link", "")
+        )
+        save_cached_ethical_assessment(db, saved_product, ethical_result)
     
     return {
         "barcode": barcode,
-        "product": result_dict
+        "product": result_dict,
+        "ethical_assessment": ethical_result
     }
 
 
