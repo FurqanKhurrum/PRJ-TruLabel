@@ -22,7 +22,21 @@ from typing import Optional, Dict, Any
 import asyncio
 import json
 import re
+from pydantic import BaseModel
+from user_model import User, UserFavorite
+from auth_service import (
+    hash_password, verify_password,
+    create_access_token, get_current_user, get_optional_user,
+)
 
+class RegisterRequest(BaseModel):
+    email:        str
+    display_name: str
+    password:     str
+
+class LoginRequest(BaseModel):
+    email:    str
+    password: str
 # Import database components
 from database import init_db, get_db
 from product_model import Product, ScanHistory
@@ -627,6 +641,101 @@ if os.path.exists("static"):
         """Serve the image upload test page"""
         return FileResponse("static/index.html")
 
+# ── Auth Routes ───────────────────────────────────────────────────────────────
+
+@app.post("/api/auth/register", status_code=201)
+async def register(body: RegisterRequest, db: Session = Depends(get_db)):
+    email = body.email.strip().lower()
+    if db.query(User).filter(User.email == email).first():
+        raise HTTPException(status_code=409, detail="An account with that email already exists.")
+    if len(body.password) < 6:
+        raise HTTPException(status_code=422, detail="Password must be at least 6 characters.")
+    user = User(email=email, display_name=body.display_name.strip(), hashed_password=hash_password(body.password))
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    token = create_access_token(user.id, user.email)
+    return {"token": token, "user": user.to_dict()}
+
+
+@app.post("/api/auth/login")
+async def login(body: LoginRequest, db: Session = Depends(get_db)):
+    email = body.email.strip().lower()
+    user = db.query(User).filter(User.email == email).first()
+    if not user or not verify_password(body.password, user.hashed_password):
+        raise HTTPException(status_code=401, detail="Incorrect email or password.")
+    token = create_access_token(user.id, user.email)
+    return {"token": token, "user": user.to_dict()}
+
+
+@app.get("/api/auth/me")
+async def get_me(current_user: User = Depends(get_current_user)):
+    return {"user": current_user.to_dict()}
+
+
+# ── User History ──────────────────────────────────────────────────────────────
+
+@app.get("/api/user/history")
+async def get_user_history(current_user: User = Depends(get_current_user), db: Session = Depends(get_db), limit: int = 50):
+    rows = db.query(ScanHistory).filter(ScanHistory.user_id == current_user.id).order_by(ScanHistory.scanned_at.desc()).limit(limit).all()
+    barcodes = [r.barcode for r in rows]
+    products = db.query(Product).filter(Product.barcode.in_(barcodes)).all()
+    prod_map = {p.barcode: p for p in products}
+    history = []
+    for row in rows:
+        entry = row.to_dict()
+        prod = prod_map.get(row.barcode)
+        if prod:
+            entry["product_name"] = prod.product_name
+            entry["brand_name"] = prod.brand_name
+            entry["image_url"] = prod.image_url or prod.image_front_url or ""
+            entry["ethical_score"] = prod.ethical_score
+        history.append(entry)
+    return {"history": history, "total": len(history)}
+
+
+# ── Favourites ────────────────────────────────────────────────────────────────
+
+@app.get("/api/user/favorites")
+async def get_favorites(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    favs = db.query(UserFavorite).filter(UserFavorite.user_id == current_user.id).all()
+    barcodes = [f.barcode for f in favs]
+    products = db.query(Product).filter(Product.barcode.in_(barcodes)).all()
+    prod_map = {p.barcode: p for p in products}
+    result = []
+    for fav in favs:
+        entry = fav.to_dict()
+        prod = prod_map.get(fav.barcode)
+        if prod:
+            entry["product_name"] = prod.product_name
+            entry["brand_name"] = prod.brand_name
+            entry["image_url"] = prod.image_url or prod.image_front_url or ""
+            entry["ethical_score"] = prod.ethical_score
+            entry["product_type"] = prod.product_type
+        result.append(entry)
+    return {"favorites": result, "total": len(result)}
+
+
+@app.post("/api/user/favorites/{barcode}", status_code=201)
+async def add_favorite(barcode: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    existing = db.query(UserFavorite).filter(UserFavorite.user_id == current_user.id, UserFavorite.barcode == barcode).first()
+    if existing:
+        return {"message": "Already in favourites.", "favorite": existing.to_dict()}
+    fav = UserFavorite(user_id=current_user.id, barcode=barcode)
+    db.add(fav)
+    db.commit()
+    db.refresh(fav)
+    return {"message": "Added to favourites.", "favorite": fav.to_dict()}
+
+
+@app.delete("/api/user/favorites/{barcode}")
+async def remove_favorite(barcode: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    fav = db.query(UserFavorite).filter(UserFavorite.user_id == current_user.id, UserFavorite.barcode == barcode).first()
+    if not fav:
+        raise HTTPException(status_code=404, detail="Favourite not found.")
+    db.delete(fav)
+    db.commit()
+    return {"message": "Removed from favourites."}
 
 if __name__ == "__main__":
     import uvicorn

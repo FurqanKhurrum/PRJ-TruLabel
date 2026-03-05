@@ -3,7 +3,7 @@ TruLabel Enhanced Database Models
 Supports multiple product types: Food, Electronics, Books, Cosmetics, General Retail
 """
 
-from sqlalchemy import Column, String, Float, Integer, DateTime, JSON, Text, Boolean
+from sqlalchemy import Column, String, Float, Integer, DateTime, JSON, Text, Boolean, ForeignKey
 from datetime import datetime
 from database import Base
 
@@ -207,8 +207,8 @@ class ScanHistory(Base):
     # Cache hit or API fetch
     cache_hit = Column(Boolean, default=False)
     
-    # Optional: User ID if you add authentication later
-    # user_id = Column(String(50), nullable=True, index=True)
+    # User who performed the scan (NULL for guests)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     
     def __repr__(self):
         return f"<ScanHistory(id={self.id}, barcode={self.barcode}, type={self.product_type}, scanned_at={self.scanned_at})>"
@@ -221,6 +221,7 @@ class ScanHistory(Base):
             "product_type": self.product_type,
             "data_source": self.data_source,
             "cache_hit": self.cache_hit,
+            "user_id": self.user_id,
             "scanned_at": self.scanned_at.isoformat() if self.scanned_at else None,
         }
 
