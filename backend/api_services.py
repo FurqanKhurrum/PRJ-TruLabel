@@ -94,7 +94,7 @@ class OpenFoodFactsService(ProductAPIService):
                     return None
                     
         except Exception as e:
-            logger.error(f"OpenFoodFacts error: {e}")
+            logger.error(f"OpenFoodFacts error: {type(e).__name__}: {e}")
             return None
 
 
