@@ -122,70 +122,10 @@ RETRY_DELAY = 1
 AI_TIMEOUT = 30
 ETHICAL_ASSESSMENT_CACHE_KEY = "_trulabel_ethical_assessment"
 
-# Enhanced AI prompt for different product types
-ETHICAL_ASSESSMENT_PROMPT = """You are an ethical product assessment AI. Analyze this product and return ONLY a JSON object.
-
-Product: {product_name}
-Brand: {brand_name}
-Type: {product_type}
-Category: {category}
-Description: {description}
-Labels: {labels}
-Product URL: {product_url}
-
-Based on the product type "{product_type}", provide appropriate ethical scores:
-
-For FOOD products, focus on:
-- Sustainability: organic farming, carbon footprint, packaging
-- Labor: fair trade, worker conditions
-- Environmental: local sourcing, seasonal production
-- Health: nutritional value, additives
-
-For ELECTRONICS products, focus on:
-- Sustainability: e-waste, recyclability, repairability
-- Labor: supply chain ethics, conflict minerals
-- Environmental: energy efficiency, toxic materials
-- Durability: planned obsolescence, warranty
-
-For COSMETICS products, focus on:
-- Animal Testing: cruelty-free status
-- Sustainability: packaging, ingredients sourcing
-- Health: toxic chemicals, allergens
-- Environmental: biodegradability, microplastics
-
-For GENERAL/RETAIL products, focus on:
-- Manufacturing ethics
-- Environmental impact
-- Labor practices
-- Product longevity
-
-Return this exact JSON structure with scores out of 100:
-{{
-  "sustainability_score": <number 0-100>,
-  "sustainability_description": "<brief 1-2 sentence explanation>",
-  "labor_practices_score": <number 0-100>,
-  "labor_practices_description": "<brief 1-2 sentence explanation>",
-  "animal_testing_score": <number 0-100>,
-  "animal_testing_description": "<brief 1-2 sentence explanation>",
-  "environmental_impact_score": <number 0-100>,
-  "environmental_impact_description": "<brief 1-2 sentence explanation>",
-  "overall_recommendation": "<SHORT: 'Highly Recommended', 'Recommended', 'Consider Alternatives', or 'Avoid'>",
-  "key_concerns": ["<concern 1>", "<concern 2>"],
-  "positive_attributes": ["<positive 1>", "<positive 2>"],
-  "sources": [
-    {{
-      "name": "<source name>",
-      "url": "<https://...>"
-    }}
-  ]
-}}
-
-Rules for sources:
-- Use real, product-related URLs whenever possible (product page, brand site, certification registry, or public database).
-- If Product URL is provided, include it as one of the sources.
-- Provide 1-4 sources. If none are available, return an empty array.
-
-Return ONLY the JSON object, no other text."""
+# Load ethical assessment prompt from file
+_PROMPT_PATH = os.path.join(os.path.dirname(__file__), "prompts", "ethical_assessment_prompt.txt")
+with open(_PROMPT_PATH, "r", encoding="utf-8") as _f:
+    ETHICAL_ASSESSMENT_PROMPT = _f.read()
 
 
 class AIServiceError(Exception):
