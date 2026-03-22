@@ -25,6 +25,23 @@ const BARCODE_FORMATS = [
   "qr_code",
 ];
 
+const PROGRESS_START_VALUE = 4;
+const PROGRESS_INTERVAL_MS = 220;
+const PROGRESS_MAX_BEFORE_COMPLETE = 99.6;
+const PROGRESS_EASING_FACTOR = 0.08;
+
+const getNextProgressValue = (current) => {
+  if (current >= PROGRESS_MAX_BEFORE_COMPLETE) {
+    return current;
+  }
+
+  const remaining = 100 - current;
+  return Math.min(
+    current + remaining * PROGRESS_EASING_FACTOR,
+    PROGRESS_MAX_BEFORE_COMPLETE
+  );
+};
+
 const detectBarcodeFromFile = async (file) => {
   if (typeof window === "undefined") return null;
 
@@ -73,14 +90,10 @@ export default function ScanPage() {
       clearInterval(progressTimerRef.current);
     }
 
-    setProgress(5);
+    setProgress(PROGRESS_START_VALUE);
     progressTimerRef.current = setInterval(() => {
-      setProgress((current) => {
-        if (current >= 90) return current;
-        const bump = current < 40 ? 7 : current < 70 ? 4 : 2;
-        return Math.min(current + bump, 90);
-      });
-    }, 300);
+      setProgress((current) => getNextProgressValue(current));
+    }, PROGRESS_INTERVAL_MS);
   };
 
   const stopProgress = () => {

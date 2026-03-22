@@ -12,7 +12,10 @@ export default function ScanHero({
   const [manualValue, setManualValue] = useState("");
 
   const handlePick = () => inputRef.current?.click();
-  const progressValue = Number.isFinite(progress) ? Math.round(progress) : 0;
+  const normalizedProgress = Number.isFinite(progress)
+    ? Math.min(Math.max(progress, 0), 100)
+    : 0;
+  const progressValue = Math.round(normalizedProgress);
   const statusText = isLoading
     ? `Scanning... ${progressValue}%`
     : selectedLabel
@@ -115,7 +118,7 @@ export default function ScanHero({
           <div className="h-2 w-full rounded-full bg-white/20">
             <div
               className="h-full rounded-full bg-white transition-all duration-300"
-              style={{ width: `${progressValue}%` }}
+              style={{ width: `${normalizedProgress}%` }}
             />
           </div>
         </div>
