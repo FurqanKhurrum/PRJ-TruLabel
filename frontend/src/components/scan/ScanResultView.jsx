@@ -77,6 +77,18 @@ const confidenceConfig = {
   low:    { label: "Low Confidence",    className: "bg-rose-100 text-rose-700" },
 };
 
+const getProductImageCandidates = (product) => {
+  if (!product || typeof product !== "object") return [];
+
+  return [...new Set(
+    [
+      product.image_url,
+      product.image_front_url,
+      product.image_small_url,
+    ].filter((value) => typeof value === "string" && value.trim())
+  )];
+};
+
 export default function ScanResultView() {
   const router = useRouter();
   const [scanResult]  = useState(() => getLastScan());
@@ -90,6 +102,13 @@ export default function ScanResultView() {
   const assessment = scanResult?.ethical_assessment?.data ?? null;
   const productType  = product?.product_type || "general";
   const typeConfig   = productTypeConfig[productType] || productTypeConfig.general;
+  const productImageCandidates = useMemo(() => getProductImageCandidates(product), [product]);
+  const [productImageIndex, setProductImageIndex] = useState(0);
+  const productImage = productImageCandidates[productImageIndex] ?? "";
+
+  useEffect(() => {
+    setProductImageIndex(0);
+  }, [productImageCandidates]);
 
   useEffect(() => {
     if (!user || !token || !scanResult?.barcode) return;
@@ -99,6 +118,15 @@ export default function ScanResultView() {
       })
       .catch(() => {});
   }, [user, token, scanResult?.barcode]);
+
+  const handleProductImageError = () => {
+    setProductImageIndex((current) => {
+      if (current >= productImageCandidates.length - 1) {
+        return productImageCandidates.length;
+      }
+      return current + 1;
+    });
+  };
 
   const handleToggleFavorite = async () => {
     if (!user) { router.push("/login"); return; }
@@ -212,20 +240,35 @@ export default function ScanResultView() {
         {/* Product header + grade */}
         <section className="rounded-3xl bg-[color:var(--card)] p-5 shadow-sm">
           <div className="flex items-start justify-between gap-4">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="text-xl">{typeConfig.icon}</span>
-                <span className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">{typeConfig.label}</span>
+            <div className="flex min-w-0 flex-1 items-start gap-4">
+              <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[color:var(--card-muted)]">
+                {productImage ? (
+                  <img
+                    src={productImage}
+                    alt={product.product_name || "Product image"}
+                    className="h-full w-full object-contain p-1"
+                    onError={handleProductImageError}
+                  />
+                ) : (
+                  <span className="text-3xl">{typeConfig.icon}</span>
+                )}
               </div>
-              <h1 className="mt-1 text-lg font-bold leading-tight text-[color:var(--ink)]">{product.product_name}</h1>
-              <p className="text-sm text-[color:var(--muted)]">{product.brand_name}</p>
 
-              {/* Confidence badge */}
-              {confidence && (
-                <span className={`mt-2 inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${confidenceStyle.className}`}>
-                  {confidenceStyle.label}
-                </span>
-              )}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">{typeConfig.icon}</span>
+                  <span className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">{typeConfig.label}</span>
+                </div>
+                <h1 className="mt-1 text-lg font-bold leading-tight text-[color:var(--ink)]">{product.product_name}</h1>
+                <p className="text-sm text-[color:var(--muted)]">{product.brand_name}</p>
+
+                {/* Confidence badge */}
+                {confidence && (
+                  <span className={`mt-2 inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${confidenceStyle.className}`}>
+                    {confidenceStyle.label}
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* Grade circle */}
