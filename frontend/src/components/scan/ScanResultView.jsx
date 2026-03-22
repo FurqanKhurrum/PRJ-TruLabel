@@ -39,7 +39,7 @@ const productTypeConfig = {
   general:     { icon: "📦", color: "slate",   label: "General Product" },
 };
 
-const tabs = ["overview", "details", "sources"];
+const tabs = ["overview", "details", "insights", "sources"];
 
 const gradeStyles = {
   A: "bg-emerald-500 text-white",
@@ -283,13 +283,13 @@ export default function ScanResultView() {
 
         {/* Tabs */}
         <section className="rounded-2xl bg-[color:var(--card-muted)] p-2">
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-4 gap-1">
             {tabs.map((tab) => (
               <button
                 key={tab}
                 type="button"
                 onClick={() => setActiveTab(tab)}
-                className={`rounded-xl px-3 py-2 text-center text-sm font-semibold ${
+                className={`rounded-xl px-2 py-2 text-center text-xs font-semibold ${
                   activeTab === tab
                     ? "bg-[color:var(--card)] text-[color:var(--ink)] shadow-sm"
                     : "text-[color:var(--muted)]"
@@ -386,32 +386,6 @@ export default function ScanResultView() {
                   ))}
                 </div>
 
-                {/* Alternatives */}
-                {alternatives.length > 0 && (
-                  <section className="rounded-3xl bg-[color:var(--card)] p-5 shadow-sm">
-                    <h2 className="text-sm font-semibold text-[color:var(--ink)]">More Ethical Alternatives</h2>
-                    <div className="mt-3 space-y-3">
-                      {alternatives.map((alt, i) => (
-                        <div key={i} className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--card-muted)] p-4">
-                          <p className="text-sm font-semibold text-[color:var(--ink)]">{alt.name}</p>
-                          <p className="mt-1 text-xs text-[color:var(--muted)]">{alt.reason}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </section>
-                )}
-
-                {/* Score Reasoning button */}
-                <button
-                  type="button"
-                  onClick={() => router.push("/score-reasoning")}
-                  className="flex w-full items-center justify-between rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] px-5 py-4 text-sm font-semibold text-[color:var(--ink)] shadow-sm transition hover:bg-[color:var(--card-muted)]"
-                >
-                  <span>View Full Score Reasoning</span>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M9 18l6-6-6-6" />
-                  </svg>
-                </button>
               </>
             ) : (
               <section className="rounded-3xl bg-[color:var(--card)] p-5 text-sm text-[color:var(--muted)] shadow-sm">
@@ -437,6 +411,42 @@ export default function ScanResultView() {
                 ))}
               </div>
             </section>
+          </div>
+        )}
+
+        {/* ── INSIGHTS TAB ── */}
+        {activeTab === "insights" && (
+          <div className="space-y-4">
+            {/* Score Reasoning button */}
+            <button
+              type="button"
+              onClick={() => router.push("/score-reasoning")}
+              className="flex w-full items-center justify-between rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] px-5 py-4 text-sm font-semibold text-[color:var(--ink)] shadow-sm transition hover:bg-[color:var(--card-muted)]"
+            >
+              <span>View Full Score Reasoning</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 18l6-6-6-6" />
+              </svg>
+            </button>
+
+            {/* Alternatives */}
+            {alternatives.length > 0 ? (
+              <section className="rounded-3xl bg-[color:var(--card)] p-5 shadow-sm">
+                <h2 className="text-sm font-semibold text-[color:var(--ink)]">More Ethical Alternatives</h2>
+                <div className="mt-3 space-y-3">
+                  {alternatives.map((alt, i) => (
+                    <div key={i} className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--card-muted)] p-4">
+                      <p className="text-sm font-semibold text-[color:var(--ink)]">{alt.name}</p>
+                      <p className="mt-1 text-xs text-[color:var(--muted)]">{alt.reason}</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ) : (
+              <section className="rounded-3xl bg-[color:var(--card)] p-5 text-sm text-[color:var(--muted)] shadow-sm">
+                No alternatives were suggested for this product.
+              </section>
+            )}
           </div>
         )}
 
