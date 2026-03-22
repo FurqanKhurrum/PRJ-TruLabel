@@ -19,6 +19,7 @@ import os
 #import google.genai as genai
 from openai import AsyncOpenAI
 from tavily import TavilyClient
+from typing import Optional, Dict, Any
 
 from dotenv import load_dotenv
 import logging
@@ -328,7 +329,7 @@ def save_cached_ethical_assessment(
 
 
 @app.post("/api/scan")
-async def scan_product(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def scan_product(file: UploadFile = File(...), db: Session = Depends(get_db), current_user: Optional[User] = Depends(get_optional_user)):
     """
     Enhanced scan endpoint supporting multiple product types
     Automatically detects barcode and tries appropriate APIs
@@ -374,7 +375,8 @@ async def scan_product(file: UploadFile = File(...), db: Session = Depends(get_d
             barcode=barcode,
             product_type=cached_product.product_type,
             data_source=cached_product.data_source,
-            cache_hit=True
+            cache_hit=True,
+            user_id=current_user.id if current_user else None,
         )
         db.add(scan_history)
         db.commit()
@@ -432,7 +434,8 @@ async def scan_product(file: UploadFile = File(...), db: Session = Depends(get_d
         barcode=barcode,
         product_type=saved_product.product_type,
         data_source=saved_product.data_source,
-        cache_hit=False
+        cache_hit=False,
+        user_id=current_user.id if current_user else None,
     )
     db.add(scan_history)
     db.commit()
@@ -484,7 +487,7 @@ async def extract_barcode(file: UploadFile = File(...)):
 
 
 @app.get("/api/product/{barcode}")
-async def get_product(barcode: str, db: Session = Depends(get_db)):
+async def get_product(barcode: str, db: Session = Depends(get_db), current_user: Optional[User] = Depends(get_optional_user)):
     """Get product by barcode"""
     print(f"\n🔍 Direct lookup: {barcode}")
     
@@ -497,7 +500,8 @@ async def get_product(barcode: str, db: Session = Depends(get_db)):
             barcode=barcode,
             product_type=cached_product.product_type,
             data_source=cached_product.data_source,
-            cache_hit=True
+            cache_hit=True,
+            user_id=current_user.id if current_user else None,
         )
         db.add(scan_history)
         db.commit()
@@ -545,7 +549,8 @@ async def get_product(barcode: str, db: Session = Depends(get_db)):
         barcode=barcode,
         product_type=saved_product.product_type,
         data_source=saved_product.data_source,
-        cache_hit=False
+        cache_hit=False,
+        user_id=current_user.id if current_user else None,
     )
     db.add(scan_history)
     db.commit()
