@@ -39,7 +39,7 @@ const productTypeConfig = {
   general:     { icon: "📦", color: "slate",   label: "General Product" },
 };
 
-const tabs = ["overview", "details", "sources"];
+const tabs = ["overview", "details", "insights", "sources"];
 
 const gradeStyles = {
   A: "bg-emerald-500 text-white",
@@ -71,6 +71,12 @@ const getHostFromUrl = (url) => {
   try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return ""; }
 };
 
+const confidenceConfig = {
+  high:   { label: "High Confidence",   className: "bg-emerald-100 text-emerald-700" },
+  medium: { label: "Medium Confidence", className: "bg-amber-100 text-amber-700" },
+  low:    { label: "Low Confidence",    className: "bg-rose-100 text-rose-700" },
+};
+
 export default function ScanResultView() {
   const router = useRouter();
   const [scanResult]  = useState(() => getLastScan());
@@ -85,7 +91,6 @@ export default function ScanResultView() {
   const productType  = product?.product_type || "general";
   const typeConfig   = productTypeConfig[productType] || productTypeConfig.general;
 
-  // Check if already favourited when the page loads
   useEffect(() => {
     if (!user || !token || !scanResult?.barcode) return;
     apiGetFavorites(token)
@@ -124,10 +129,15 @@ export default function ScanResultView() {
 
   const grade = useMemo(() => gradeFromScores(scores.map((item) => item.score)), [scores]);
 
+  // Merge certifications from product labels AND AI-found certifications
   const certifications = useMemo(() => {
-    if (!product?.labels) return [];
-    return product.labels.split(",").map((l) => l.trim()).filter(Boolean).slice(0, 6);
-  }, [product]);
+    const fromLabels = product?.labels
+      ? product.labels.split(",").map((l) => l.trim()).filter(Boolean)
+      : [];
+    const fromAI = Array.isArray(assessment?.certifications) ? assessment.certifications : [];
+    const merged = [...new Set([...fromAI, ...fromLabels])];
+    return merged.slice(0, 8);
+  }, [product, assessment]);
 
   const detailScores = useMemo(() => {
     if (!assessment) return [];
@@ -136,6 +146,11 @@ export default function ScanResultView() {
       { id: "labor",          title: "Labor Practices",       score: assessment.labor_practices_score, description: assessment.labor_practices_description || "Not available." },
       { id: "testing",        title: "Animal Testing Policy", score: assessment.animal_testing_score,  description: assessment.animal_testing_description  || "Not available." },
     ];
+  }, [assessment]);
+
+  const alternatives = useMemo(() => {
+    if (!Array.isArray(assessment?.alternatives)) return [];
+    return assessment.alternatives.filter((a) => a?.name);
   }, [assessment]);
 
   const sources = useMemo(() => {
@@ -158,6 +173,9 @@ export default function ScanResultView() {
     return list;
   }, [assessment, product]);
 
+  const confidence = assessment?.confidence?.toLowerCase();
+  const confidenceStyle = confidenceConfig[confidence] ?? confidenceConfig.medium;
+
   // ── Empty state ──────────────────────────────────────────────────────────────
   if (!scanResult || !product) {
     return (
@@ -179,22 +197,11 @@ export default function ScanResultView() {
     );
   }
 
-  const overviewText =
-    assessment?.environmental_impact_description ||
-    assessment?.sustainability_description ||
-    assessment?.labor_practices_description ||
-    scanResult?.ethical_assessment?.raw_assessment ||
-    scanResult?.ethical_assessment?.error ||
-    "Assessment details will appear here once available.";
-
-  const image = product.image_url || product.image_front_url || product.image_small_url;
-
-  // ── Main render ──────────────────────────────────────────────────────────────
   return (
     <main className="min-h-screen bg-[color:var(--canvas)] px-6 py-10 pb-28">
       <div className="mx-auto flex w-full max-w-md flex-col gap-6">
 
-        {/* Back */}
+        {/* Back button */}
         <Link href="/scan" className="inline-flex items-center gap-2 text-sm font-semibold text-[color:var(--muted)]">
           <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[color:var(--card)] shadow-sm">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
@@ -202,36 +209,32 @@ export default function ScanResultView() {
           Back
         </Link>
 
-        {/* Product card */}
+        {/* Product header + grade */}
         <section className="rounded-3xl bg-[color:var(--card)] p-5 shadow-sm">
-          <div className="mb-3 flex items-center justify-between">
-            <span className={`inline-flex items-center gap-1.5 rounded-full bg-${typeConfig.color}-50 px-3 py-1 text-xs font-semibold text-${typeConfig.color}-700`}>
-              <span>{typeConfig.icon}</span>
-              <span>{typeConfig.label}</span>
-            </span>
-            {product.data_source && (
-              <span className="text-xs text-[color:var(--muted)]">{product.data_source}</span>
-            )}
-          </div>
-
-          <div className="flex items-center gap-4">
-            {image ? (
-              <img src={image} alt={product.product_name} className="h-20 w-20 rounded-2xl object-cover" />
-            ) : (
-              <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-200 via-amber-100 to-emerald-100 text-2xl">
-                {typeConfig.icon}
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">{typeConfig.icon}</span>
+                <span className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">{typeConfig.label}</span>
               </div>
-            )}
-            <div className="flex-1">
-              <h1 className="text-base font-semibold text-[color:var(--ink)]">{product.product_name || "Scanned Product"}</h1>
-              <p className="text-sm text-[color:var(--muted)]">{product.brand_name || product.manufacturer || "Unknown brand"}</p>
-              <p className="text-sm text-[color:var(--muted)]">Origin: {product.country_of_origin || "--"}</p>
+              <h1 className="mt-1 text-lg font-bold leading-tight text-[color:var(--ink)]">{product.product_name}</h1>
+              <p className="text-sm text-[color:var(--muted)]">{product.brand_name}</p>
+
+              {/* Confidence badge */}
+              {confidence && (
+                <span className={`mt-2 inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${confidenceStyle.className}`}>
+                  {confidenceStyle.label}
+                </span>
+              )}
             </div>
-            <div className={`flex h-14 w-14 items-center justify-center rounded-full text-lg font-semibold shadow-sm ${gradeStyles[grade] ?? "bg-[color:var(--card-muted)] text-[color:var(--muted)]"}`}>
+
+            {/* Grade circle */}
+            <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-xl font-bold ${grade !== "-" ? gradeStyles[grade] : "bg-[color:var(--card-muted)] text-[color:var(--muted)]"}`}>
               {grade}
             </div>
           </div>
 
+          {/* Score bars */}
           {scores.length ? (
             <div className="mt-5 space-y-4">
               {scores.map((item) => (
@@ -253,7 +256,7 @@ export default function ScanResultView() {
             <p className="mt-4 text-sm text-[color:var(--muted)]">Scores are not available for this product yet.</p>
           )}
 
-          {/* ── Favourite button ── */}
+          {/* Favourite button */}
           <button
             type="button"
             onClick={handleToggleFavorite}
@@ -280,13 +283,13 @@ export default function ScanResultView() {
 
         {/* Tabs */}
         <section className="rounded-2xl bg-[color:var(--card-muted)] p-2">
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-4 gap-1">
             {tabs.map((tab) => (
               <button
                 key={tab}
                 type="button"
                 onClick={() => setActiveTab(tab)}
-                className={`rounded-xl px-3 py-2 text-center text-sm font-semibold ${
+                className={`rounded-xl px-2 py-2 text-center text-xs font-semibold ${
                   activeTab === tab
                     ? "bg-[color:var(--card)] text-[color:var(--ink)] shadow-sm"
                     : "text-[color:var(--muted)]"
@@ -298,9 +301,21 @@ export default function ScanResultView() {
           </div>
         </section>
 
-        {/* Overview tab */}
-        {activeTab === "overview" ? (
+        {/* ── OVERVIEW TAB ── */}
+        {activeTab === "overview" && (
           <>
+            {/* AI Summary */}
+            {assessment?.summary && (
+              <section className="rounded-3xl bg-[color:var(--card)] p-5 shadow-sm">
+                <h2 className="text-sm font-semibold text-[color:var(--ink)]">Summary</h2>
+                <p className="mt-3 text-sm leading-relaxed text-[color:var(--muted)]">{assessment.summary}</p>
+                {assessment.confidence_reason && (
+                  <p className="mt-2 text-xs italic text-[color:var(--muted)]">{assessment.confidence_reason}</p>
+                )}
+              </section>
+            )}
+
+            {/* Certifications */}
             <section className="rounded-3xl bg-[color:var(--card)] p-5 shadow-sm">
               <div className="flex items-center gap-2 text-sm font-semibold text-[color:var(--ink)]">
                 <span className="text-emerald-500">
@@ -318,105 +333,125 @@ export default function ScanResultView() {
                   ))}
                 </div>
               ) : (
-                <p className="mt-3 text-sm text-[color:var(--muted)]">No certifications listed for this product.</p>
+                <p className="mt-3 text-sm text-[color:var(--muted)]">No certifications found for this product.</p>
               )}
             </section>
 
-            <section className="rounded-3xl bg-[color:var(--card)] p-5 shadow-sm">
-              <h2 className="text-sm font-semibold text-[color:var(--ink)]">Overall Assessment</h2>
-              <p className="mt-3 text-sm leading-relaxed text-[color:var(--muted)]">{overviewText}</p>
-            </section>
-          </>
-        ) : null}
+            {/* Key concerns & positives */}
+            {assessment && (
+              <section className="rounded-3xl bg-[color:var(--card)] p-5 shadow-sm">
+                <h2 className="text-sm font-semibold text-[color:var(--ink)]">Overall Assessment</h2>
+                {assessment.overall_recommendation && (
+                  <p className="mt-2 text-sm font-semibold text-emerald-600">{assessment.overall_recommendation}</p>
+                )}
 
-        {/* Details tab */}
-        {activeTab === "details" ? (
+                {Array.isArray(assessment.positive_attributes) && assessment.positive_attributes.length > 0 && (
+                  <div className="mt-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-emerald-600">Positives</p>
+                    <ul className="mt-2 space-y-1">
+                      {assessment.positive_attributes.map((attr, i) => (
+                        <li key={i} className="flex items-start gap-2 text-sm text-[color:var(--muted)]">
+                          <span className="mt-0.5 text-emerald-500">✓</span>{attr}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {Array.isArray(assessment.key_concerns) && assessment.key_concerns.length > 0 && (
+                  <div className="mt-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-amber-600">Concerns</p>
+                    <ul className="mt-2 space-y-1">
+                      {assessment.key_concerns.map((concern, i) => (
+                        <li key={i} className="flex items-start gap-2 text-sm text-[color:var(--muted)]">
+                          <span className="mt-0.5 text-amber-500">⚠</span>{concern}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </section>
+            )}
+          </>
+        )}
+
+        {/* ── DETAILS TAB ── */}
+        {activeTab === "details" && (
           <div className="space-y-4">
             {assessment ? (
-              <div className="space-y-4">
-                {detailScores.map((item) => (
-                  <ScoreCard key={item.id} title={item.title} score={item.score} description={item.description} />
-                ))}
-              </div>
+              <>
+                <div className="space-y-4">
+                  {detailScores.map((item) => (
+                    <ScoreCard key={item.id} title={item.title} score={item.score} description={item.description} />
+                  ))}
+                </div>
+
+              </>
             ) : (
               <section className="rounded-3xl bg-[color:var(--card)] p-5 text-sm text-[color:var(--muted)] shadow-sm">
                 Scores and descriptions are not available for this product yet.
               </section>
             )}
 
+            {/* Product meta */}
             <section className="rounded-3xl bg-[color:var(--card)] p-5 shadow-sm">
-              <div className="grid gap-4 text-sm">
-                <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--card-muted)] p-4">
-                  <p className="text-xs uppercase tracking-wide text-[color:var(--muted)]">Barcode</p>
-                  <p className="mt-2 font-semibold text-[color:var(--ink)]">{scanResult.barcode || "--"}</p>
-                </div>
-
-                {productType === "electronics" && (
-                  <>
-                    {product.model && (
-                      <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--card-muted)] p-4">
-                        <p className="text-xs uppercase tracking-wide text-[color:var(--muted)]">Model</p>
-                        <p className="mt-2 font-semibold text-[color:var(--ink)]">{product.model}</p>
-                      </div>
-                    )}
-                    {product.mpn && (
-                      <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--card-muted)] p-4">
-                        <p className="text-xs uppercase tracking-wide text-[color:var(--muted)]">MPN</p>
-                        <p className="mt-2 font-semibold text-[color:var(--ink)]">{product.mpn}</p>
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {productType === "book" && product.isbn && (
-                  <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--card-muted)] p-4">
-                    <p className="text-xs uppercase tracking-wide text-[color:var(--muted)]">ISBN</p>
-                    <p className="mt-2 font-semibold text-[color:var(--ink)]">{product.isbn}</p>
+              <h2 className="text-sm font-semibold text-[color:var(--ink)]">Product Details</h2>
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                {[
+                  { label: "Brand",    value: product.brand_name },
+                  { label: "Category", value: product.category },
+                  { label: "Origin",   value: product.country_of_origin },
+                  { label: "Type",     value: product.product_type },
+                  ...(product.ecoscore ? [{ label: "Eco Score", value: `${product.ecoscore}/100` }] : []),
+                ].filter((r) => r.value).map((row) => (
+                  <div key={row.label} className="rounded-2xl bg-[color:var(--card-muted)] p-3">
+                    <p className="text-xs uppercase tracking-wide text-[color:var(--muted)]">{row.label}</p>
+                    <p className="mt-1 text-sm font-semibold text-[color:var(--ink)]">{row.value}</p>
                   </div>
-                )}
-
-                {product.category && product.category !== "--" && (
-                  <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--card-muted)] p-4">
-                    <p className="text-xs uppercase tracking-wide text-[color:var(--muted)]">Category</p>
-                    <p className="mt-2 font-semibold text-[color:var(--ink)]">
-                      {Array.isArray(product.category) ? product.category.join("") : product.category}
-                    </p>
-                  </div>
-                )}
-
-                {product.description && (
-                  <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--card-muted)] p-4">
-                    <p className="text-xs uppercase tracking-wide text-[color:var(--muted)]">Description</p>
-                    <p className="mt-2 text-sm leading-relaxed text-[color:var(--ink)]">
-                      {Array.isArray(product.description) ? product.description.join("") : product.description}
-                    </p>
-                  </div>
-                )}
-
-                {product.country_of_origin && product.country_of_origin !== "--" && (
-                  <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--card-muted)] p-4">
-                    <p className="text-xs uppercase tracking-wide text-[color:var(--muted)]">Origin</p>
-                    <p className="mt-2 font-semibold text-[color:var(--ink)]">
-                      {product.country_of_origin.replace(/^en:|^fr:|^es:/, "").trim()}
-                    </p>
-                  </div>
-                )}
-
-                {(productType === "food" || productType === "cosmetics") && (
-                  <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--card-muted)] p-4">
-                    <p className="text-xs uppercase tracking-wide text-[color:var(--muted)]">Eco Score</p>
-                    <p className="mt-2 font-semibold text-[color:var(--ink)]">
-                      {product.ecoscore ? `${product.ecoscore}/100` : "--"}
-                    </p>
-                  </div>
-                )}
+                ))}
               </div>
             </section>
           </div>
-        ) : null}
+        )}
 
-        {/* Sources tab */}
-        {activeTab === "sources" ? (
+        {/* ── INSIGHTS TAB ── */}
+        {activeTab === "insights" && (
+          <div className="space-y-4">
+            {/* Score Reasoning button */}
+            <button
+              type="button"
+              onClick={() => router.push("/score-reasoning")}
+              className="flex w-full items-center justify-between rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] px-5 py-4 text-sm font-semibold text-[color:var(--ink)] shadow-sm transition hover:bg-[color:var(--card-muted)]"
+            >
+              <span>View Full Score Reasoning</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 18l6-6-6-6" />
+              </svg>
+            </button>
+
+            {/* Alternatives */}
+            {alternatives.length > 0 ? (
+              <section className="rounded-3xl bg-[color:var(--card)] p-5 shadow-sm">
+                <h2 className="text-sm font-semibold text-[color:var(--ink)]">More Ethical Alternatives</h2>
+                <div className="mt-3 space-y-3">
+                  {alternatives.map((alt, i) => (
+                    <div key={i} className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--card-muted)] p-4">
+                      <p className="text-sm font-semibold text-[color:var(--ink)]">{alt.name}</p>
+                      <p className="mt-1 text-xs text-[color:var(--muted)]">{alt.reason}</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ) : (
+              <section className="rounded-3xl bg-[color:var(--card)] p-5 text-sm text-[color:var(--muted)] shadow-sm">
+                No alternatives were suggested for this product.
+              </section>
+            )}
+          </div>
+        )}
+
+        {/* ── SOURCES TAB ── */}
+        {activeTab === "sources" && (
           <section className="rounded-3xl bg-[color:var(--card)] p-5 shadow-sm">
             <h2 className="text-sm font-semibold text-[color:var(--ink)]">Data Sources</h2>
             {sources.length ? (
@@ -442,7 +477,7 @@ export default function ScanResultView() {
                 ))}
               </ul>
             ) : (
-              <p className="mt-3 text-sm text-[color:var(--muted)]">No product-related sources were provided for this scan yet.</p>
+              <p className="mt-3 text-sm text-[color:var(--muted)]">No sources were provided for this scan yet.</p>
             )}
 
             {product.cache_hit !== undefined && (
@@ -454,7 +489,7 @@ export default function ScanResultView() {
               </div>
             )}
           </section>
-        ) : null}
+        )}
 
       </div>
       <BottomNav />

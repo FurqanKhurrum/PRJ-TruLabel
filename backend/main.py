@@ -15,7 +15,12 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 import os
-import google.genai as genai
+
+#import google.genai as genai
+from openai import AsyncOpenAI
+from tavily import TavilyClient
+from typing import Optional, Dict, Any
+
 from dotenv import load_dotenv
 import logging
 from typing import Optional, Dict, Any
@@ -73,8 +78,11 @@ if not api_key:
     logger.error("GOOGLE_API_KEY not found in environment variables")
     raise ValueError("GOOGLE_API_KEY must be set in .env file")
 
-client = genai.Client(api_key=api_key)
-
+#client = genai.Client(api_key=api_key)
+client = AsyncOpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key=os.getenv("OPENROUTER_API_KEY")
+)
 # Initialize API Aggregator (optionally with Barcode Lookup API key)
 barcode_lookup_key = os.getenv("BARCODE_LOOKUP_API_KEY")  # Optional
 api_aggregator = ProductAPIAggregator(barcode_lookup_api_key=barcode_lookup_key)
@@ -84,6 +92,26 @@ app = FastAPI(
     description="Ethical Consumer Product Scanner - Food, Electronics, Books, Cosmetics & More",
     version="3.0.0"
 )
+
+TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
+tavily_client = TavilyClient(api_key=TAVILY_API_KEY)
+
+TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "web_search",
+            "description": "Search the web for current information about a brand's ethics, labor practices, sustainability, or controversies.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "The search query"}
+                },
+                "required": ["query"]
+            }
+        }
+    }
+]
 
 @app.on_event("startup")
 async def startup_event():
@@ -122,70 +150,10 @@ RETRY_DELAY = 1
 AI_TIMEOUT = 30
 ETHICAL_ASSESSMENT_CACHE_KEY = "_trulabel_ethical_assessment"
 
-# Enhanced AI prompt for different product types
-ETHICAL_ASSESSMENT_PROMPT = """You are an ethical product assessment AI. Analyze this product and return ONLY a JSON object.
-
-Product: {product_name}
-Brand: {brand_name}
-Type: {product_type}
-Category: {category}
-Description: {description}
-Labels: {labels}
-Product URL: {product_url}
-
-Based on the product type "{product_type}", provide appropriate ethical scores:
-
-For FOOD products, focus on:
-- Sustainability: organic farming, carbon footprint, packaging
-- Labor: fair trade, worker conditions
-- Environmental: local sourcing, seasonal production
-- Health: nutritional value, additives
-
-For ELECTRONICS products, focus on:
-- Sustainability: e-waste, recyclability, repairability
-- Labor: supply chain ethics, conflict minerals
-- Environmental: energy efficiency, toxic materials
-- Durability: planned obsolescence, warranty
-
-For COSMETICS products, focus on:
-- Animal Testing: cruelty-free status
-- Sustainability: packaging, ingredients sourcing
-- Health: toxic chemicals, allergens
-- Environmental: biodegradability, microplastics
-
-For GENERAL/RETAIL products, focus on:
-- Manufacturing ethics
-- Environmental impact
-- Labor practices
-- Product longevity
-
-Return this exact JSON structure with scores out of 100:
-{{
-  "sustainability_score": <number 0-100>,
-  "sustainability_description": "<brief 1-2 sentence explanation>",
-  "labor_practices_score": <number 0-100>,
-  "labor_practices_description": "<brief 1-2 sentence explanation>",
-  "animal_testing_score": <number 0-100>,
-  "animal_testing_description": "<brief 1-2 sentence explanation>",
-  "environmental_impact_score": <number 0-100>,
-  "environmental_impact_description": "<brief 1-2 sentence explanation>",
-  "overall_recommendation": "<SHORT: 'Highly Recommended', 'Recommended', 'Consider Alternatives', or 'Avoid'>",
-  "key_concerns": ["<concern 1>", "<concern 2>"],
-  "positive_attributes": ["<positive 1>", "<positive 2>"],
-  "sources": [
-    {{
-      "name": "<source name>",
-      "url": "<https://...>"
-    }}
-  ]
-}}
-
-Rules for sources:
-- Use real, product-related URLs whenever possible (product page, brand site, certification registry, or public database).
-- If Product URL is provided, include it as one of the sources.
-- Provide 1-4 sources. If none are available, return an empty array.
-
-Return ONLY the JSON object, no other text."""
+# Load ethical assessment prompt from file
+_PROMPT_PATH = os.path.join(os.path.dirname(__file__), "prompts", "ethical_assessment_prompt.txt")
+with open(_PROMPT_PATH, "r", encoding="utf-8") as _f:
+    ETHICAL_ASSESSMENT_PROMPT = _f.read()
 
 
 class AIServiceError(Exception):
@@ -203,19 +171,13 @@ async def assess_product_ethics(
     product_url: str = "",
     retry_count: int = 0
 ) -> Optional[Dict[str, Any]]:
-    """
-    Enhanced AI assessment supporting multiple product types
-    """
+    """AI assessment with Tavily web search tool use loop."""
     try:
         if not product_name or product_name == "Unknown":
             logger.warning("Product name is unknown or empty")
-            return {
-                "status": "incomplete_data",
-                "error": "Product name not available"
-            }
-        
-        # Format prompt with enhanced product info
-        prompt = ETHICAL_ASSESSMENT_PROMPT.format(
+            return {"status": "incomplete_data", "error": "Product name not available"}
+
+        user_prompt = ETHICAL_ASSESSMENT_PROMPT.format(
             product_name=product_name,
             brand_name=brand_name if brand_name != "Unknown" else "Not specified",
             product_type=product_type,
@@ -224,78 +186,88 @@ async def assess_product_ethics(
             labels=labels if labels else "None",
             product_url=product_url if product_url else "Not available"
         )
-        
+
+        messages = [{"role": "user", "content": user_prompt}]
+
         logger.info(f"Sending {product_type} product to AI (attempt {retry_count + 1}/{MAX_RETRIES})")
         print(f"\n{'='*70}\n🤖 AI Assessment Request ({product_type})\n{'='*70}")
-        
-        try:
+
+        # Tool use loop — allow up to 3 searches
+        for i in range(3):
             response = await asyncio.wait_for(
-                asyncio.to_thread(
-                    client.models.generate_content,
-                    model="gemini-2.5-flash",
-                    contents=prompt
+                client.chat.completions.create(
+                    model="google/gemini-3-flash-preview",
+                    messages=messages,
+                    tools=TOOLS,
+                    tool_choice="auto"
                 ),
                 timeout=AI_TIMEOUT
             )
-            
-            if not response or not hasattr(response, 'text'):
-                raise AIServiceError("Invalid response from AI service")
-            
-            assessment_text = response.text
-            
-            if not assessment_text or len(assessment_text.strip()) < 10:
-                raise AIServiceError("AI response is empty or too short")
-            
-            logger.info(f"✓ AI Response received ({len(assessment_text)} chars)")
-            print(f"✅ AI Assessment Complete\n{'='*70}\n")
-            
-            # Parse JSON from response
-            parsed_data = parse_ai_json_response(assessment_text)
-            
-            if parsed_data:
-                return {
-                    "status": "success",
-                    "data": parsed_data,
-                    "error": None
-                }
-            else:
-                return {
-                    "status": "success",
-                    "raw_assessment": assessment_text,
-                    "error": "Could not parse structured data"
-                }
-            
-        except asyncio.TimeoutError:
-            error_msg = f"AI API timeout after {AI_TIMEOUT} seconds"
-            logger.error(error_msg)
-            raise AIServiceError(error_msg)
-        
-        except Exception as api_error:
-            error_msg = f"{type(api_error).__name__}: {api_error}"
-            logger.error(f"AI API error: {error_msg}")
-            raise AIServiceError(f"AI API error: {str(api_error)}")
-    
-    except AIServiceError as e:
-        if retry_count < MAX_RETRIES - 1:
-            logger.warning(f"Retrying AI request in {RETRY_DELAY} seconds...")
-            await asyncio.sleep(RETRY_DELAY)
-            return await assess_product_ethics(
-                product_name, brand_name, product_type, 
-                category, description, labels, product_url, retry_count + 1
-            )
+
+            response_message = response.choices[0].message
+
+            # No tool call — model is done, extract final answer
+            if not response_message.tool_calls:
+                assessment_text = response_message.content
+                print(f"✅ AI Assessment Complete (after {i} search(es))\n{'='*70}\n")
+                break
+
+            # Handle tool calls
+            messages.append(response_message)
+            for tool_call in response_message.tool_calls:
+                query = json.loads(tool_call.function.arguments)["query"]
+                print(f"🔍 AI searching: {query}")
+
+                search_results = await asyncio.to_thread(
+                    tavily_client.search,
+                    query=query,
+                    max_results=3
+                )
+
+                # Format results for the model
+                results_text = "\n\n".join([
+                    f"Source: {r['url']}\n{r['content']}"
+                    for r in search_results.get("results", [])
+                ])
+
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "content": results_text
+                })
         else:
-            logger.error(f"All retry attempts exhausted: {e}")
-            return {
-                "status": "error",
-                "error": str(e)
-            }
-    
+            # Forced final answer after 3 searches
+            messages.append({"role": "user", "content": "Now return the final JSON assessment based on your research."})
+            final_response = await asyncio.wait_for(
+                client.chat.completions.create(
+                    model="google/gemini-3-flash-preview",
+                    messages=messages
+                ),
+                timeout=AI_TIMEOUT
+            )
+            assessment_text = final_response.choices[0].message.content
+            print(f"✅ AI Assessment Complete (max searches reached)\n{'='*70}\n")
+
+        parsed_data = parse_ai_json_response(assessment_text)
+        if parsed_data:
+            return {"status": "success", "data": parsed_data, "error": None}
+        else:
+            return {"status": "success", "raw_assessment": assessment_text, "error": "Could not parse structured data"}
+
+    except asyncio.TimeoutError:
+        error_msg = f"AI API timeout after {AI_TIMEOUT} seconds"
+        logger.error(error_msg)
+        if retry_count < MAX_RETRIES - 1:
+            await asyncio.sleep(RETRY_DELAY)
+            return await assess_product_ethics(product_name, brand_name, product_type, category, description, labels, product_url, retry_count + 1)
+        return {"status": "error", "error": error_msg}
+
     except Exception as e:
         logger.error(f"Unexpected error: {type(e).__name__}: {e}")
-        return {
-            "status": "error",
-            "error": f"Unexpected error: {str(e)}"
-        }
+        if retry_count < MAX_RETRIES - 1:
+            await asyncio.sleep(RETRY_DELAY)
+            return await assess_product_ethics(product_name, brand_name, product_type, category, description, labels, product_url, retry_count + 1)
+        return {"status": "error", "error": f"Unexpected error: {str(e)}"}
 
 
 def parse_ai_json_response(text: str) -> Optional[Dict]:
@@ -357,7 +329,7 @@ def save_cached_ethical_assessment(
 
 
 @app.post("/api/scan")
-async def scan_product(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def scan_product(file: UploadFile = File(...), db: Session = Depends(get_db), current_user: Optional[User] = Depends(get_optional_user)):
     """
     Enhanced scan endpoint supporting multiple product types
     Automatically detects barcode and tries appropriate APIs
@@ -403,7 +375,8 @@ async def scan_product(file: UploadFile = File(...), db: Session = Depends(get_d
             barcode=barcode,
             product_type=cached_product.product_type,
             data_source=cached_product.data_source,
-            cache_hit=True
+            cache_hit=True,
+            user_id=current_user.id if current_user else None,
         )
         db.add(scan_history)
         db.commit()
@@ -461,7 +434,8 @@ async def scan_product(file: UploadFile = File(...), db: Session = Depends(get_d
         barcode=barcode,
         product_type=saved_product.product_type,
         data_source=saved_product.data_source,
-        cache_hit=False
+        cache_hit=False,
+        user_id=current_user.id if current_user else None,
     )
     db.add(scan_history)
     db.commit()
@@ -513,7 +487,7 @@ async def extract_barcode(file: UploadFile = File(...)):
 
 
 @app.get("/api/product/{barcode}")
-async def get_product(barcode: str, db: Session = Depends(get_db)):
+async def get_product(barcode: str, db: Session = Depends(get_db), current_user: Optional[User] = Depends(get_optional_user)):
     """Get product by barcode"""
     print(f"\n🔍 Direct lookup: {barcode}")
     
@@ -526,7 +500,8 @@ async def get_product(barcode: str, db: Session = Depends(get_db)):
             barcode=barcode,
             product_type=cached_product.product_type,
             data_source=cached_product.data_source,
-            cache_hit=True
+            cache_hit=True,
+            user_id=current_user.id if current_user else None,
         )
         db.add(scan_history)
         db.commit()
@@ -574,7 +549,8 @@ async def get_product(barcode: str, db: Session = Depends(get_db)):
         barcode=barcode,
         product_type=saved_product.product_type,
         data_source=saved_product.data_source,
-        cache_hit=False
+        cache_hit=False,
+        user_id=current_user.id if current_user else None,
     )
     db.add(scan_history)
     db.commit()
@@ -769,6 +745,7 @@ async def remove_favorite(barcode: str, current_user: User = Depends(get_current
     db.commit()
     return {"message": "Removed from favourites."}
 
+print(f"Loading prompt from: {_PROMPT_PATH}")
 if __name__ == "__main__":
     import uvicorn
     print("=" * 70)

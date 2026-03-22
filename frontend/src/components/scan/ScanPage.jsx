@@ -6,7 +6,7 @@ import ScanHero from "@/components/scan/ScanHero";
 import RecentScans from "@/components/scan/RecentScans";
 import HomeSearchCard from "@/components/home/HomeSearchCard";
 import BottomNav from "@/components/ui/BottomNav";
-import { extractBarcode, scanImage } from "@/lib/api";
+import { extractBarcode, scanImage, getProduct } from "@/lib/api";
 import {
   getRecentScans,
   getRecentScanByBarcode,
@@ -141,6 +141,39 @@ export default function ScanPage() {
     }
   };
 
+  const handleManualBarcode = async (barcode) => {
+    setError("");
+    setSelectedLabel("");
+    setIsLoading(true);
+    startProgress();
+
+    try {
+      // Check local cache first
+      const existingScan = getRecentScanByBarcode(barcode);
+      if (existingScan?.fullScanResult) {
+        setProgress(100);
+        saveLastScan(existingScan.fullScanResult);
+        saveRecentScan(existingScan.fullScanResult);
+        router.push("/scan-result");
+        return;
+      }
+
+      const result = await getProduct(barcode);
+      setProgress(100);
+      saveLastScan(result);
+      saveRecentScan(result);
+      router.push("/scan-result");
+    } catch (err) {
+      setError(
+        err?.message ?? "Barcode not found. Please check the number and try again."
+      );
+      setProgress(0);
+    } finally {
+      stopProgress();
+      setIsLoading(false);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-[color:var(--canvas)] px-6 py-10 pb-28">
       <div className="mx-auto flex w-full max-w-md flex-col gap-6">
@@ -148,6 +181,7 @@ export default function ScanPage() {
 
         <ScanHero
           onFileSelect={handleFileSelect}
+          onManualBarcode={handleManualBarcode}
           isLoading={isLoading}
           selectedLabel={selectedLabel}
           progress={progress}
