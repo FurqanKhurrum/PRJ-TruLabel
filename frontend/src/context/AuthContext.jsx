@@ -1,53 +1,53 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, useCallback } from "react";
-import { apiLogin, apiRegister, apiGetMe } from "@/lib/auth";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { apiGetMe, apiLogin, apiRegister } from "@/lib/auth";
 
 export const AuthContext = createContext(null);
 
 const TOKEN_KEY = "trulabel_token";
 
 export function AuthProvider({ children }) {
-  const [user,    setUser]    = useState(null);
-  const [token,   setToken]   = useState(null);
-  const [loading, setLoading] = useState(true); // true while we re-hydrate from localStorage
+  const [user, setUser] = useState(null);
+  const [token, setToken] = useState(() =>
+    typeof window !== "undefined" ? localStorage.getItem(TOKEN_KEY) : null
+  );
+  const [loading, setLoading] = useState(() =>
+    typeof window !== "undefined" ? !!localStorage.getItem(TOKEN_KEY) : true
+  );
 
-  // ── Re-hydrate on first mount ──────────────────────────────────────────────
   useEffect(() => {
-    const stored = localStorage.getItem(TOKEN_KEY);
-    if (!stored) {
-      setLoading(false);
-      return;
-    }
-    // Validate the stored token against the server
-    apiGetMe(stored)
+    if (!token) return;
+
+    apiGetMe(token)
       .then(({ user }) => {
-        setToken(stored);
         setUser(user);
       })
       .catch(() => {
-        // Token expired or invalid — clear it
+        setUser(null);
+        setToken(null);
         localStorage.removeItem(TOKEN_KEY);
       })
-      .finally(() => setLoading(false));
-  }, []);
+      .finally(() => {
+        setLoading(false);
+      });
+  }, [token]);
 
-  // ── Helpers ────────────────────────────────────────────────────────────────
-
-  const persist = (token, user) => {
-    localStorage.setItem(TOKEN_KEY, token);
-    setToken(token);
-    setUser(user);
+  const persist = (nextToken, nextUser) => {
+    localStorage.setItem(TOKEN_KEY, nextToken);
+    setToken(nextToken);
+    setUser(nextUser);
+    setLoading(false);
   };
 
   const login = useCallback(async (email, password) => {
-    const data = await apiLogin(email, password); // throws on failure
+    const data = await apiLogin(email, password);
     persist(data.token, data.user);
     return data.user;
   }, []);
 
   const register = useCallback(async (email, displayName, password) => {
-    const data = await apiRegister(email, displayName, password); // throws on failure
+    const data = await apiRegister(email, displayName, password);
     persist(data.token, data.user);
     return data.user;
   }, []);
@@ -56,6 +56,7 @@ export function AuthProvider({ children }) {
     localStorage.removeItem(TOKEN_KEY);
     setToken(null);
     setUser(null);
+    setLoading(false);
   }, []);
 
   return (
@@ -65,7 +66,6 @@ export function AuthProvider({ children }) {
   );
 }
 
-/** Hook — use anywhere inside the app */
 export function useAuth() {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error("useAuth must be used inside <AuthProvider>");

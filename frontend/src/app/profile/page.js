@@ -152,7 +152,7 @@ export default function ProfilePage() {
     }
 
     try {
-      const lookup = await getProduct(item.barcode);
+      const lookup = await getProduct(item.barcode, token);
       saveLastScan(toSavedScanResult(item, lookup));
       router.push("/scan-result");
     } catch {

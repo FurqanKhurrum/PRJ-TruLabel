@@ -6,6 +6,7 @@ import ScanHero from "@/components/scan/ScanHero";
 import RecentScans from "@/components/scan/RecentScans";
 import HomeSearchCard from "@/components/home/HomeSearchCard";
 import BottomNav from "@/components/ui/BottomNav";
+import { useAuth } from "@/context/AuthContext";
 import { extractBarcode, scanImage, getProduct } from "@/lib/api";
 import {
   getRecentScans,
@@ -70,6 +71,7 @@ const detectBarcodeFromFile = async (file) => {
 
 export default function ScanPage() {
   const router = useRouter();
+  const { token } = useAuth();
   const progressTimerRef = useRef(null);
   const [selectedLabel, setSelectedLabel] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -140,7 +142,7 @@ export default function ScanPage() {
         return;
       }
 
-      const result = await scanImage(file);
+      const result = await scanImage(file, token);
       setProgress(100);
       saveLastScan(result);
       saveRecentScan(result);
@@ -171,7 +173,7 @@ export default function ScanPage() {
         return;
       }
 
-      const result = await getProduct(barcode);
+      const result = await getProduct(barcode, token);
       setProgress(100);
       saveLastScan(result);
       saveRecentScan(result);

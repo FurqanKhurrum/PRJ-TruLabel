@@ -1,17 +1,20 @@
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 
+const buildAuthHeaders = (token) =>
+  token ? { Authorization: `Bearer ${token}` } : {};
+
 /**
  * Scan a barcode image
  * Now supports multiple product types: food, electronics, books, cosmetics, etc.
  */
-export async function scanImage(file) {
+export async function scanImage(file, token) {
   const formData = new FormData();
   formData.append("file", file);
 
-  // FIXED: Changed from /api/scan-image to /api/scan
   const response = await fetch(`${API_BASE}/api/scan`, {
     method: "POST",
+    headers: buildAuthHeaders(token),
     body: formData,
   });
 
@@ -58,8 +61,10 @@ export async function extractBarcode(file) {
 /**
  * Get product by barcode directly
  */
-export async function getProduct(barcode) {
-  const response = await fetch(`${API_BASE}/api/product/${barcode}`);
+export async function getProduct(barcode, token) {
+  const response = await fetch(`${API_BASE}/api/product/${barcode}`, {
+    headers: buildAuthHeaders(token),
+  });
 
   if (!response.ok) {
     let message = "Product not found.";
